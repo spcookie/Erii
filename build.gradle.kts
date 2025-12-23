@@ -13,6 +13,7 @@ application {
 
 dependencies {
     implementation("top.mrxiaom.mirai:overflow-core:1.0.8")
+    implementation("ai.koog:koog-ktor:0.6.0")
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.server.content.negotiation)
