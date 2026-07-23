@@ -11,6 +11,7 @@ import uesugi.common.data.EmotionalTendencies
 import uesugi.common.data.PAD
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.core.message.history.HistoryService
+import uesugi.core.message.history.HourlyMessageCount
 import uesugi.core.state.emotion.BehaviorProfile
 import uesugi.core.state.emotion.EmotionService
 import uesugi.core.state.evolution.EvolutionService
@@ -281,6 +282,7 @@ fun Routing.configureBotStatus() {
                 memoryService = memoryService,
                 memoService = memoService
             )
+            val hourlyMsgCounts = historyService.getHourlyMessageCounts(botId, groupId, 12)
 
             val response = GroupStatusResponse(
                 botId = botId,
@@ -300,7 +302,8 @@ fun Routing.configureBotStatus() {
                 memeSize = groupStatus.memeSize,
                 analyzedMemeSize = groupStatus.analyzedMemeSize,
                 memes = groupStatus.memes,
-                pluginStats = pluginStats
+                pluginStats = pluginStats,
+                hourlyMsgCounts = hourlyMsgCounts
             )
 
             call.respond(response)
@@ -392,7 +395,8 @@ data class GroupStatusResponse(
     val memeSize: Long,
     val analyzedMemeSize: Long,
     val memes: List<BotStatus.Meme>,
-    val pluginStats: BotStatus.PluginStats
+    val pluginStats: BotStatus.PluginStats,
+    val hourlyMsgCounts: List<HourlyMessageCount>
 )
 
 @Serializable

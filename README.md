@@ -92,7 +92,7 @@ go install ./erii-cli
 | `erii config` | 交互式 TUI 配置编辑器 |
 | `erii setup`  | 设置向导              |
 | `erii manage` | 数据管理 TUI          |
-| `erii stats`  | 状态统计 TUI          |
+| `erii status` | 状态统计 TUI          |
 
 ## 🛠️ 技术栈
 
@@ -115,8 +115,8 @@ go install ./erii-cli
 
 <a href="https://www.star-history.com/?repos=spcookie%2Ferii&type=date&logscale=&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=spcookie/erii&type=date&theme=dark&logscale&legend=top-left&sealed_token=DwnqgkwsaVAYtjex6DdgP6sAVwy2S-nHEwgvU9uS5nAXHogdCrAl0z1xD05j3qPnmf-bpt787SlCiz2qrmST2bvQAPwaEUKA94ZoUcfkSFivK5W8NGMd4A" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=spcookie/erii&type=date&logscale&legend=top-left&sealed_token=DwnqgkwsaVAYtjex6DdgP6sAVwy2S-nHEwgvU9uS5nAXHogdCrAl0z1xD05j3qPnmf-bpt787SlCiz2qrmST2bvQAPwaEUKA94ZoUcfkSFivK5W8NGMd4A" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=spcookie/erii&type=date&logscale&legend=top-left&sealed_token=DwnqgkwsaVAYtjex6DdgP6sAVwy2S-nHEwgvU9uS5nAXHogdCrAl0z1xD05j3qPnmf-bpt787SlCiz2qrmST2bvQAPwaEUKA94ZoUcfkSFivK5W8NGMd4A" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=spcookie/erii&type=date&theme=dark&logscale&legend=top-left&sealed_token=qH79hCL-Kh4sv8moangZ4Rd6h9bVvzPLOZ6vx4gd4iaOX0KHVk6xDqkCHPU8M8mKegfxInengia-KNVIBR4K3wt6PSSWColTuqSFnMS_UyyZVmHqk-cUc_LhLqqFLwbpZwmBAXLrUR0edR5m0hPkpvrqYeTSbvDw-cW-5mPcS5qqAhLYTaMDLaaTTKq8" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=spcookie/erii&type=date&logscale&legend=top-left&sealed_token=qH79hCL-Kh4sv8moangZ4Rd6h9bVvzPLOZ6vx4gd4iaOX0KHVk6xDqkCHPU8M8mKegfxInengia-KNVIBR4K3wt6PSSWColTuqSFnMS_UyyZVmHqk-cUc_LhLqqFLwbpZwmBAXLrUR0edR5m0hPkpvrqYeTSbvDw-cW-5mPcS5qqAhLYTaMDLaaTTKq8" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=spcookie/erii&type=date&logscale&legend=top-left&sealed_token=qH79hCL-Kh4sv8moangZ4Rd6h9bVvzPLOZ6vx4gd4iaOX0KHVk6xDqkCHPU8M8mKegfxInengia-KNVIBR4K3wt6PSSWColTuqSFnMS_UyyZVmHqk-cUc_LhLqqFLwbpZwmBAXLrUR0edR5m0hPkpvrqYeTSbvDw-cW-5mPcS5qqAhLYTaMDLaaTTKq8" />
  </picture>
 </a>

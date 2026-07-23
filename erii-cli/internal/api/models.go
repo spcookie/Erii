@@ -345,7 +345,7 @@ type TokenUsageSummary struct {
 	DailyViews          []DailyTokenUsageSummary `json:"dailyViews"`
 }
 
-// ── Stats specific ──
+// ── Status specific ──
 
 type FlowState struct {
 	Meter float64 `json:"meter"`
@@ -390,6 +390,12 @@ type PluginStats struct {
 	CmdExtensions     int `json:"cmdExtensions"`
 	RouteExtensions   int `json:"routeExtensions"`
 	PassiveExtensions int `json:"passiveExtensions"`
+}
+
+type HourlyMessageCount struct {
+	HourLabel  string `json:"hourLabel"`
+	BotCount   int    `json:"botCount"`
+	GroupCount int    `json:"groupCount"`
 }
 
 type PluginRefreshResponse struct {
@@ -502,22 +508,23 @@ type UpdateCronTaskRequest struct {
 }
 
 type GroupStatus struct {
-	BotID            string           `json:"botId"`
-	BotName          string           `json:"botName"`
-	GroupID          string           `json:"groupId"`
-	GroupName        string           `json:"groupName"`
-	BehaviorProfile  *BehaviorProfile `json:"behaviorProfile"`
-	PAD              *PAD             `json:"pad"`
-	FlowState        FlowState        `json:"flowState"`
-	VolitionState    VolitionState    `json:"volitionState"`
-	Vocabularies     []string         `json:"vocabularies"`
-	Summary          *string          `json:"summary"`
-	FactSize         int64            `json:"factSize"`
-	UserProfileSize  int64            `json:"userProfileSize"`
-	Facts            Facts            `json:"facts"`
-	UserProfiles     []UserProfile    `json:"userProfiles"`
-	MemeSize         int64            `json:"memeSize"`
-	AnalyzedMemeSize int64            `json:"analyzedMemeSize"`
-	Memes            []Meme           `json:"memes"`
-	PluginStats      PluginStats      `json:"pluginStats"`
+	BotID            string               `json:"botId"`
+	BotName          string               `json:"botName"`
+	GroupID          string               `json:"groupId"`
+	GroupName        string               `json:"groupName"`
+	BehaviorProfile  *BehaviorProfile     `json:"behaviorProfile"`
+	PAD              *PAD                 `json:"pad"`
+	FlowState        FlowState            `json:"flowState"`
+	VolitionState    VolitionState        `json:"volitionState"`
+	Vocabularies     []string             `json:"vocabularies"`
+	Summary          *string              `json:"summary"`
+	FactSize         int64                `json:"factSize"`
+	UserProfileSize  int64                `json:"userProfileSize"`
+	Facts            Facts                `json:"facts"`
+	UserProfiles     []UserProfile        `json:"userProfiles"`
+	MemeSize         int64                `json:"memeSize"`
+	AnalyzedMemeSize int64                `json:"analyzedMemeSize"`
+	Memes            []Meme               `json:"memes"`
+	PluginStats      PluginStats          `json:"pluginStats"`
+	HourlyMsgCounts  []HourlyMessageCount `json:"hourlyMsgCounts"`
 }

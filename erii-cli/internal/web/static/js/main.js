@@ -848,7 +848,7 @@
     }
 
     // Commands that use BubbleTea TUI (alternate screen)
-    const tuiCommands = ['config', 'setup', 'manage', 'stats', 'chat', 'usage', 'log'];
+    const tuiCommands = ['config', 'setup', 'manage', 'status', 'chat', 'usage', 'log'];
 
     function terminalHasVisibleOutput() {
         if (!term || !term.buffer || !term.buffer.active) return false;

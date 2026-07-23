@@ -489,7 +489,7 @@ func TestStaticConsoleContainsLogAndServerControls(t *testing.T) {
 		"runtimeHasPid = status.pidFile === true",
 		"function positionServerMenu()",
 		"serverMenu.contains(event.target)",
-		"const tuiCommands = ['config', 'setup', 'manage', 'stats', 'chat', 'usage', 'log']",
+		"const tuiCommands = ['config', 'setup', 'manage', 'status', 'chat', 'usage', 'log']",
 		"closeServerMenu(true)",
 	} {
 		if !strings.Contains(js, contract) {
