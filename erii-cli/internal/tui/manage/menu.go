@@ -98,7 +98,7 @@ func manageMenuItems(web bool) []list.Item {
 		menuItem{resourceType: ResourceFacts, action: "pushMemoryMenu", title: menuTitle(web, "\uee9c", "🗂️", "Memory"), desc: "Manage and search group memory"},
 		menuItem{resourceType: ResourceProfiles, action: "pushTable", title: menuTitle(web, "\uf0c0", "🪪", "User Profiles"), desc: "Manage user profiles"},
 		menuItem{resourceType: ResourceSummaries, action: "pushTable", title: menuTitle(web, "\uf15c", "📑", "Summaries"), desc: "Manage conversation summaries"},
-		menuItem{resourceType: ResourceMemes, action: "pushTable", title: menuTitle(web, "\uf03e", "🎭", "Memes"), desc: "Manage meme metadata"},
+		menuItem{resourceType: ResourceMemes, action: "pushMemeMenu", title: menuTitle(web, "\uf03e", "🎭", "Memes"), desc: "Manage meme metadata and search"},
 		menuItem{resourceType: ResourceVocabularies, action: "pushTable", title: menuTitle(web, "\uede2", "📖", "Vocabulary"), desc: "Manage learned vocabulary"},
 		menuItem{action: "pushMessageMenu", title: menuTitle(web, "\uf086", "💬", "Messages"), desc: "Manage message history and resources"},
 		menuItem{action: "pushStateMenu", title: menuTitle(web, "\uf201", "📊", "State"), desc: "View and edit emotion, flow, volition"},
@@ -148,6 +148,13 @@ func (m *ManageMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "pushStateMenu":
 					return m, func() tea.Msg {
 						return PushStateMenuMsg{
+							Bot:   m.bot,
+							Group: m.group,
+						}
+					}
+				case "pushMemeMenu":
+					return m, func() tea.Msg {
+						return PushMemeMenuMsg{
 							Bot:   m.bot,
 							Group: m.group,
 						}

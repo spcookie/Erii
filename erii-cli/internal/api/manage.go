@@ -88,6 +88,10 @@ func (c *Client) DeleteMeme(botID, groupID string, id int) error {
 	return err
 }
 
+func (c *Client) SearchMemeVector(botID, groupID string, req MemeSearchRequest) (*MemeVectorSearchResponse, error) {
+	return doJSONRequest[*MemeVectorSearchResponse](c, "POST", fmt.Sprintf("/api/bot/%s/group/%s/memes/vector-search", botID, groupID), req)
+}
+
 func (c *Client) GetVocabularies(botID, groupID string) (PaginatedResponse[VocabRecord], error) {
 	return doJSONRequest[PaginatedResponse[VocabRecord]](c, "GET", paginatedURL(fmt.Sprintf("/api/bot/%s/group/%s/vocabulary", botID, groupID)), nil)
 }

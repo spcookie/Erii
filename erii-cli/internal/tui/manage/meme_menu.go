@@ -51,7 +51,7 @@ func NewMemeMenuModel(bot api.BotInfo, group api.GroupInfo) *MemeMenuModel {
 
 func memeMenuItems(web bool) []list.Item {
 	return []list.Item{
-		memeMenuItem{action: "list", title: menuTitle(web, "", "📋", "List"), desc: "Open the existing meme data table"},
+		memeMenuItem{action: "list", title: menuTitle(web, "", "📋", "Record"), desc: "Open the existing meme data table"},
 		memeMenuItem{action: "search", title: menuTitle(web, "", "🧭", "Vector"), desc: "Embedding search over memes"},
 	}
 }

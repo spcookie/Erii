@@ -148,6 +148,25 @@ type UpdateMemeRequest struct {
 	Tags        *string `json:"tags"`
 }
 
+// ── Meme Search ──
+
+type MemeSearchRequest struct {
+	Query string `json:"query"`
+	Limit int    `json:"limit"`
+}
+
+type MemeVectorSearchResult struct {
+	Meme     MemeRecord `json:"meme"`
+	Score    *float64   `json:"score"`
+	VectorID *string    `json:"vectorId"`
+	Source   string     `json:"source"`
+}
+
+type MemeVectorSearchResponse struct {
+	Query   string                   `json:"query"`
+	Results []MemeVectorSearchResult `json:"results"`
+}
+
 // ── Vocabulary ──
 
 type VocabRecord struct {
