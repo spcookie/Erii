@@ -22,6 +22,8 @@ import uesugi.core.state.evolution.toRecord
 import uesugi.core.state.flow.FlowGaugeManager
 import uesugi.core.state.flow.FlowRepository
 import uesugi.core.state.flow.toRecord
+import uesugi.core.state.meme.MemeData.MemeVectorSearchResponse
+import uesugi.core.state.meme.MemeData.MemeVectorSearchResult
 import uesugi.core.state.meme.MemeRepository
 import uesugi.core.state.meme.MemeService
 import uesugi.core.state.memory.MemoryRepository
@@ -52,6 +54,12 @@ data class FactRequest(
 
 @Serializable
 data class MemorySearchRequest(
+    val query: String,
+    val limit: Int = 10
+)
+
+@Serializable
+data class MemeSearchRequest(
     val query: String,
     val limit: Int = 10
 )
@@ -332,6 +340,29 @@ fun Routing.configureBotStatusManager() {
                 call.intPathParam("meme-id") ?: return@delete call.respond(mapOf("error" to "invalid meme-id"))
             )
             call.respond(if (deleted) mapOf("success" to true) else mapOf("error" to "meme not found"))
+        }
+
+        post("/api/bot/{bot-id}/group/{group-id}/memes/vector-search") {
+            val request = call.receiveOrError<MemeSearchRequest>() ?: return@post
+            val results = memeService.searchByVector(
+                botId = call.botId(),
+                groupId = call.groupId(),
+                query = request.query,
+                topK = request.limit.coerceIn(1, 100)
+            )
+            call.respond(
+                MemeVectorSearchResponse(
+                    query = request.query,
+                    results = results.map { (meme, score) ->
+                        MemeVectorSearchResult(
+                            meme = meme,
+                            score = score,
+                            vectorId = meme.vectorId,
+                            source = "vector"
+                        )
+                    }
+                )
+            )
         }
 
         get("/api/bot/{bot-id}/group/{group-id}/vocabulary") {

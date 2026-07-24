@@ -234,4 +234,24 @@ object MemeData {
             return result
         }
     }
+
+    /**
+     * 表情包向量搜索结果项
+     */
+    @Serializable
+    data class MemeVectorSearchResult(
+        val meme: MemeRecord,
+        val score: Float? = null,
+        val vectorId: String? = null,
+        val source: String = "vector"
+    )
+
+    /**
+     * 表情包向量搜索响应
+     */
+    @Serializable
+    data class MemeVectorSearchResponse(
+        val query: String,
+        val results: List<MemeVectorSearchResult>
+    )
 }
