@@ -143,7 +143,7 @@ func (m *MemeSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *MemeSearchModel) View() string {
-	title := TitleBarStyle.Render("Memes / Vector Search")
+	title := lipgloss.NewStyle().Foreground(style.Accent).Bold(true).Padding(0, 1).Render("Memes / Vector Search")
 
 	left := m.leftPane()
 	right := m.rightPane()

@@ -220,7 +220,7 @@ func (m *MemorySearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *MemorySearchModel) View() string {
-	title := TitleBarStyle.Render(fmt.Sprintf("Memory / %s", m.mode.Title()))
+	title := lipgloss.NewStyle().Foreground(style.Accent).Bold(true).Padding(0, 1).Render(fmt.Sprintf("Memory / %s", m.mode.Title()))
 
 	left := m.leftPane()
 	right := m.rightPane()
