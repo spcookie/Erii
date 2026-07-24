@@ -80,6 +80,12 @@ private fun init(database: Database) {
             inBatch = true
         )
         exec("ALTER TABLE memory_facts ADD COLUMN IF NOT EXISTS entities TEXT DEFAULT '[]' NOT NULL")
+        // 清理从 values 重命名为 entities 后遗留的旧列
+        try {
+            exec("ALTER TABLE memory_facts DROP COLUMN IF EXISTS values")
+        } catch (_: ExposedSQLException) {
+            // 列不存在（新数据库），忽略
+        }
     }
 }
 
