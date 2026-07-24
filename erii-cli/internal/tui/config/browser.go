@@ -332,8 +332,9 @@ func (m *BrowserModel) handleFormSizeAndCancel(msg tea.Msg, active *bool, form *
 		m.height = msg.Height
 		w := m.formWidth()
 		newForm := form.WithWidth(w)
+		_, cmd := newForm.Update(msg)
 		setForm(newForm)
-		return true, nil
+		return true, cmd
 	case tea.KeyMsg:
 		if msg.String() == "esc" {
 			*active = false

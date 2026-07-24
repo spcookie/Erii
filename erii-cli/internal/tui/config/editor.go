@@ -435,6 +435,11 @@ func (m *LeafEditorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.help.Width = msg.Width
 		if m.form != nil {
 			m.form = m.form.WithWidth(min(60, msg.Width-8))
+			_, cmd := m.form.Update(msg)
+			if m.envList.Items() != nil {
+				m.envList.SetSize(msg.Width, msg.Height-4)
+			}
+			return m, cmd
 		}
 		if m.envList.Items() != nil {
 			m.envList.SetSize(msg.Width, msg.Height-4)
