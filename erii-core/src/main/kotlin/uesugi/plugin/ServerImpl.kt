@@ -8,9 +8,11 @@ import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.routing.*
 import uesugi.common.toolkit.ConfigHolder
+import uesugi.common.toolkit.logger
 import uesugi.server.SystemConfigHolder
 import uesugi.spi.PluginDef
 import uesugi.spi.Server
+import java.util.concurrent.ConcurrentHashMap
 
 class ServerImpl(val defined: PluginDef) : Server {
 
@@ -23,6 +25,7 @@ class ServerImpl(val defined: PluginDef) : Server {
         }
 
     companion object {
+        private val log = logger()
         private val _port by lazy {
             SystemConfigHolder.config.property("ktor.deployment.port").getString().toInt() + 100
         }
@@ -50,11 +53,46 @@ class ServerImpl(val defined: PluginDef) : Server {
             }.start()
             ref!!
         }
+
+        private val pluginRoutes = ConcurrentHashMap<String, Route>()
+
+        private val childrenField by lazy {
+            Route::class.java.getDeclaredField("_children").apply {
+                isAccessible = true
+            }
+        }
+
+        fun clearPluginRoutes(pluginName: String) {
+            val route = pluginRoutes.remove(pluginName)
+            if (route != null) {
+                try {
+                    @Suppress("UNCHECKED_CAST")
+                    val children = childrenField.get(route) as MutableList<Route>
+                    children.clear()
+                } catch (e: Exception) {
+                    log.warn("Failed to clear plugin routes for $pluginName", e)
+                }
+            }
+        }
     }
 
     override fun route(conf: Route.() -> Unit) {
-        routeing.route("/${defined.name}") {
-            conf()
+        val existing = pluginRoutes[defined.name]
+        if (existing != null) {
+            try {
+                @Suppress("UNCHECKED_CAST")
+                val children = childrenField.get(existing) as MutableList<Route>
+                children.clear()
+            } catch (e: Exception) {
+                log.warn("Failed to clear route children for ${defined.name}, falling back to new node", e)
+                val route = routeing.route("/${defined.name}") { conf() }
+                pluginRoutes[defined.name] = route
+                return
+            }
+            with(existing) { conf() }
+        } else {
+            val route = routeing.route("/${defined.name}") { conf() }
+            pluginRoutes[defined.name] = route
         }
     }
 

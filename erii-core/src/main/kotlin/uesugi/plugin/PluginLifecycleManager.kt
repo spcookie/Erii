@@ -247,9 +247,8 @@ class PluginLifecycleManager(
     }
 
     private fun closePlugin(pluginId: String) {
-        handlesByPlugin.remove(pluginId).orEmpty().forEach { handle ->
-            handle.close()
-        }
+        val handles = handlesByPlugin.remove(pluginId).orEmpty()
+        handles.forEach { it.close() }
         ExtensionRegister.removePlugin(pluginId)
         RouteRuleRegister.removePlugin(pluginId)
         CmdRuleRegister.removePlugin(pluginId)
@@ -293,6 +292,11 @@ private fun closeResources(
     vector: VectorImpl,
     context: PluginContext?,
 ) {
+    runCatching {
+        ServerImpl.clearPluginRoutes(context?.defined?.name ?: extension.name)
+    }.onFailure {
+        LOG.warn("Failed to clear plugin routes for ${extension.name}", it)
+    }
     runCatching { context?.close() }.onFailure { LOG.warn("Failed to close plugin context for ${extension.name}", it) }
     runCatching { extension.onUnload() }.onFailure { LOG.warn("Failed to unload extension ${extension.name}", it) }
     runCatching { mem.close() }.onFailure { LOG.warn("Failed to close plugin mem for ${extension.name}", it) }
