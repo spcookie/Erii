@@ -1,7 +1,21 @@
 # Stage 1: Build erii-core (Kotlin/Gradle)
 FROM eclipse-temurin:17 AS kotlin-build
 WORKDIR /build
-COPY . .
+
+# Copy root build files
+COPY settings.gradle.kts build.gradle.kts gradlew gradlew.bat ./
+COPY gradle/ gradle/
+
+# Copy required modules
+COPY erii-common/ erii-common/
+COPY erii-spi/ erii-spi/
+COPY erii-core/ erii-core/
+
+# Build and publish erii-onebot11 to local maven (pre-requisite for erii-core)
+COPY erii-onebot11/ erii-onebot11/
+RUN cd erii-onebot11 && ./gradlew publishToMavenLocal --no-daemon --quiet
+
+# Build erii-core
 RUN ./gradlew :erii-core:installDist --no-daemon --quiet
 
 # Stage 2: Build erii-cli (Go)

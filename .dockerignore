@@ -33,3 +33,21 @@ erii-docs/
 
 # Misc
 erii-distribution/
+
+# Local build artifacts & indexes
+graphify-out/
+erii-core/graphify-out/
+erii-cli/graphify-out/
+erii-common/graphify-out/
+erii-plugin-gradle/graphify-out/
+logs/
+erii-core/logs/
+erii-core/store/
+verdaccio/
+.uesugi/
+erii-app/
+erii-design/
+erii-plugin-skill/
+official-qq-onebot/
+oh-my-erii-plugins/
+doc/
