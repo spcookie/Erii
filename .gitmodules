@@ -10,3 +10,6 @@
 [submodule "erii-docs"]
 	path = erii-docs
 	url = https://github.com/spcookie/erii-docs.git
+[submodule "erii-plugin-skill"]
+	path = erii-plugin-skill
+	url = https://github.com/spcookie/erii-plugin-skill.git
