@@ -12,18 +12,17 @@ services:
         reservations:
           memory: 512m
     environment:
-      - JAVA_OPTS=-XX:+UseG1GC -Xms256m -Xmx256m -XX:MaxGCPauseMillis=200 -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/erii/oom_heap.hprof -Dfile.encoding=UTF-8 -Duser.timezone=Asia/Shanghai --add-opens java.base/java.lang=ALL-UNNAMED
-      - ERII_CORE_OPTS=-Dpf4j.pluginsDir=./plugins -Dconfig.plugin.dir=./conf/plugin-config -Dconfig.path=./conf/application.conf -Dconfig.souls.dir=./conf/souls -Dconfig.rules.dir=./conf/rules
-    env_file:
-      - ./conf/.env.local
+      - WEB_OPTS=--host 0.0.0.0 --port 8180
     volumes:
       - ./conf:/erii/conf
       - ./store:/erii/store
       - ./plugins:/erii/plugins
       - ./.conf:/erii/.conf
+      - ./.erii:/erii/.erii
     extra_hosts:
       - "hostmachine:host-gateway"
     ports:
       - "8080:8080"
       - "8082:8082"
       - "8000:8000"
+      - "8180:8180"

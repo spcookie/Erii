@@ -1,0 +1,35 @@
+# Git
+.git
+.gitmodules
+
+# Gradle build artifacts
+build/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Go build artifacts
+erii-cli/build/
+
+# Logs
+*.log
+
+# Local store data
+store/
+
+# IDE
+.idea/
+.kotlin/
+.run/
+*.iml
+
+# OS
+.DS_Store
+
+# Docs
+erii-docs/
+
+# Node
+.workflow/node_modules/
+
+# Misc
+erii-distribution/
