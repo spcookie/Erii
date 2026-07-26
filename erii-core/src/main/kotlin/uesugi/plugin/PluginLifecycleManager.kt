@@ -206,7 +206,7 @@ class PluginLifecycleManager(
 
         var context: PluginContext? = null
         runCatching {
-            context = PluginContextImpl(
+            val createdContext = PluginContextImpl(
                 pluginId,
                 extension.name,
                 pluginDef,
@@ -220,16 +220,19 @@ class PluginLifecycleManager(
                 http,
                 server,
                 httpProxy,
-            ).apply {
+            )
+            context = createdContext
+            createdContext.apply {
                 extension.onLoad(this)
                 start()
             }
         }.onFailure {
-            closeResources(extension, mem, kv, blob, vector, context)
+            PluginCommandExampleRegistry.removeExtension(pluginId, extension.name)
+            closeResources(extension, mem, kv, blob, vector, context, server)
             throw it
         }.getOrThrow()
 
-        return ExtensionHandle(pluginId, extension, mem, kv, blob, vector, context)
+        return ExtensionHandle(pluginId, extension, mem, kv, blob, vector, context, server)
     }
 
     private fun registerRoutes(pluginId: String, extension: AgentExtension<*>) {
@@ -277,9 +280,10 @@ class PluginLifecycleManager(
         val blob: BlobImpl,
         val vector: VectorImpl,
         val context: PluginContext?,
+        val server: ServerImpl,
     ) {
         fun close() {
-            closeResources(extension, mem, kv, blob, vector, context)
+            closeResources(extension, mem, kv, blob, vector, context, server)
         }
     }
 }
@@ -291,10 +295,9 @@ private fun closeResources(
     blob: BlobImpl,
     vector: VectorImpl,
     context: PluginContext?,
+    server: ServerImpl,
 ) {
-    runCatching {
-        ServerImpl.clearPluginRoutes(context?.defined?.name ?: extension.name)
-    }.onFailure {
+    runCatching { server.close() }.onFailure {
         LOG.warn("Failed to clear plugin routes for ${extension.name}", it)
     }
     runCatching { context?.close() }.onFailure { LOG.warn("Failed to close plugin context for ${extension.name}", it) }

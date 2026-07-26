@@ -8,30 +8,45 @@ import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.routing.*
 import uesugi.common.toolkit.ConfigHolder
-import uesugi.common.toolkit.logger
 import uesugi.server.SystemConfigHolder
 import uesugi.spi.PluginDef
 import uesugi.spi.Server
-import java.util.concurrent.ConcurrentHashMap
 
 class ServerImpl(val defined: PluginDef) : Server {
+
+    private val prefixOwner = Any()
+
+    @Volatile
+    private var effectivePrefix = defined.name
+
+    private var prefixRegistered = false
+    private var routeRegistered = false
+    private var routeConfiguration: (Route.() -> Unit)? = null
 
     override val contextUrl: URLBuilder
         get() = URLBuilder().apply {
             protocol = URLProtocol.HTTP
             host = ConfigHolder.getBrowserExternalHost()
             port = _port
-            pathSegments = listOf("plugin", defined.name)
+            pathSegments = listOf("plugin", effectivePrefix)
         }
 
     companion object {
-        private val log = logger()
+        private val serverLock = Any()
+
         private val _port by lazy {
             SystemConfigHolder.config.property("ktor.deployment.port").getString().toInt() + 100
         }
 
-        private val routeing by lazy {
-            var ref: Route? = null
+        @Volatile
+        private var registry: PluginRouteRegistry? = null
+
+        private val prefixManager = PluginRoutePrefixManager()
+
+        private fun registryLocked(): PluginRouteRegistry {
+            registry?.let { return it }
+
+            var createdRegistry: PluginRouteRegistry? = null
             embeddedServer(Netty, configure = {
                 connectors.add(EngineConnectorBuilder().apply {
                     host = "0.0.0.0"
@@ -45,55 +60,56 @@ class ServerImpl(val defined: PluginDef) : Server {
                     jackson()
                 }
 
-                routing {
-                    route("/plugin") {
-                        ref = this
-                    }
+                val routeRegistry = PluginRouteRegistry(this)
+                createdRegistry = routeRegistry
+                intercept(ApplicationCallPipeline.Call) {
+                    routeRegistry.dispatch(this)
                 }
             }.start()
-            ref!!
+
+            return checkNotNull(createdRegistry) {
+                "Plugin HTTP server started without initializing its route registry"
+            }.also { registry = it }
         }
+    }
 
-        private val pluginRoutes = ConcurrentHashMap<String, Route>()
+    override fun registerPrefix(prefix: String) {
+        synchronized(serverLock) {
+            val previousPrefix = effectivePrefix
+            val selectedPrefix = prefixManager.register(prefixOwner, defined.name, prefix)
+            prefixRegistered = true
+            effectivePrefix = selectedPrefix
 
-        private val childrenField by lazy {
-            Route::class.java.getDeclaredField("_children").apply {
-                isAccessible = true
-            }
-        }
-
-        fun clearPluginRoutes(pluginName: String) {
-            val route = pluginRoutes.remove(pluginName)
-            if (route != null) {
-                try {
-                    @Suppress("UNCHECKED_CAST")
-                    val children = childrenField.get(route) as MutableList<Route>
-                    children.clear()
-                } catch (e: Exception) {
-                    log.warn("Failed to clear plugin routes for $pluginName", e)
-                }
+            val conf = routeConfiguration
+            if (routeRegistered && previousPrefix != selectedPrefix && conf != null) {
+                registry?.unregister(previousPrefix)
+                registryLocked().register(selectedPrefix, conf)
             }
         }
     }
 
     override fun route(conf: Route.() -> Unit) {
-        val existing = pluginRoutes[defined.name]
-        if (existing != null) {
-            try {
-                @Suppress("UNCHECKED_CAST")
-                val children = childrenField.get(existing) as MutableList<Route>
-                children.clear()
-            } catch (e: Exception) {
-                log.warn("Failed to clear route children for ${defined.name}, falling back to new node", e)
-                val route = routeing.route("/${defined.name}") { conf() }
-                pluginRoutes[defined.name] = route
-                return
+        synchronized(serverLock) {
+            if (!prefixRegistered) {
+                effectivePrefix = prefixManager.register(prefixOwner, defined.name, defined.name)
+                prefixRegistered = true
             }
-            with(existing) { conf() }
-        } else {
-            val route = routeing.route("/${defined.name}") { conf() }
-            pluginRoutes[defined.name] = route
+            routeConfiguration = conf
+            registryLocked().register(effectivePrefix, conf)
+            routeRegistered = true
         }
     }
 
+    internal fun close() {
+        synchronized(serverLock) {
+            if (routeRegistered) {
+                registry?.unregister(effectivePrefix)
+            }
+            routeRegistered = false
+            routeConfiguration = null
+            prefixManager.unregister(prefixOwner)
+            prefixRegistered = false
+            effectivePrefix = defined.name
+        }
+    }
 }

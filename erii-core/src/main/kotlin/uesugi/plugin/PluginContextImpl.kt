@@ -18,6 +18,7 @@ import uesugi.core.component.usage.UsageContext
 import uesugi.core.route.MetaToolSetRegister
 import uesugi.core.route.RouteCallEvent
 import uesugi.spi.*
+import uesugi.spi.annotation.withPluginContext
 import kotlin.time.Duration.Companion.milliseconds
 
 class PluginContextImpl(
@@ -110,15 +111,19 @@ class PluginContextImpl(
 
         eventJob = EventBus.subscribeAsync<IntegrationEvent>(scope) { event ->
             scope.launch {
-                for (handler in eventHandlers) {
-                    handler(event)
+                withPluginContext(this@PluginContextImpl) {
+                    for (handler in eventHandlers.toList()) {
+                        handler(event)
+                    }
                 }
             }
         }
         syncEventHandler = EventBus.subscribeSync<IntegrationEvent> { event ->
             runBlocking {
-                for (handler in eventHandlers) {
-                    handler(event)
+                withPluginContext(this@PluginContextImpl) {
+                    for (handler in eventHandlers.toList()) {
+                        handler(event)
+                    }
                 }
             }
         }
