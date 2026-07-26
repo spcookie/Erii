@@ -73,12 +73,17 @@ class EmbeddedVectorStore(
 
     private val lock = ReentrantReadWriteLock()
 
+    @Volatile
+    private var uncommittedCount = 0
+
     companion object {
         const val VECTOR_FIELD = "vector"
         const val ID_FIELD = "id"
         const val CONTENT_FIELD = "content"
         const val SEARCH_TEXT_FIELD = "search_text"
         const val TAG = "tag"
+
+        private const val COMMIT_THRESHOLD = 50
     }
 
     init {
@@ -95,16 +100,16 @@ class EmbeddedVectorStore(
 
         lock.write {
             writer.updateDocument(Term(ID_FIELD, id), document(id, content, tag, vector, searchText))
-            writer.commit()
             searcherManager.maybeRefresh()
+            maybeCommit()
         }
     }
 
     override fun delete(id: String) {
         lock.write {
             writer.deleteDocuments(Term(ID_FIELD, id))
-            writer.commit()
             searcherManager.maybeRefresh()
+            maybeCommit()
         }
     }
 
@@ -112,6 +117,7 @@ class EmbeddedVectorStore(
         lock.write {
             writer.deleteAll()
             writer.commit()
+            uncommittedCount = 0
             searcherManager.maybeRefresh()
         }
     }
@@ -125,6 +131,7 @@ class EmbeddedVectorStore(
                 writer.addDocument(document(item.id, item.content, item.tag, item.vector, item.searchText))
             }
             writer.commit()
+            uncommittedCount = 0
             searcherManager.maybeRefresh()
         }
     }
@@ -206,9 +213,25 @@ class EmbeddedVectorStore(
     }
 
     override fun close() {
-        searcherManager.close()
-        writer.close()
-        directory.close()
+        lock.write {
+            flush()
+            searcherManager.close()
+            writer.close()
+            directory.close()
+        }
+    }
+
+    fun flush() {
+        writer.commit()
+        uncommittedCount = 0
+    }
+
+    private fun maybeCommit() {
+        uncommittedCount++
+        if (uncommittedCount >= COMMIT_THRESHOLD) {
+            writer.commit()
+            uncommittedCount = 0
+        }
     }
 
 
