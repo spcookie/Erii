@@ -340,7 +340,7 @@ interface Database {
 }
 
 interface Server {
-    val url: URLBuilder
+    val contextUrl: URLBuilder
     fun route(conf: Route.() -> Unit)
 }
 

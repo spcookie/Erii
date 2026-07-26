@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class ServerImpl(val defined: PluginDef) : Server {
 
-    override val url: URLBuilder
+    override val contextUrl: URLBuilder
         get() = URLBuilder().apply {
             protocol = URLProtocol.HTTP
             host = ConfigHolder.getBrowserExternalHost()
