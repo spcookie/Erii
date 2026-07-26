@@ -340,6 +340,7 @@ interface Database {
 }
 
 interface Server {
+    /** Effective public URL at access time. Register a custom prefix before reading this value. */
     val contextUrl: URLBuilder
 
     fun registerPrefix(prefix: String)
