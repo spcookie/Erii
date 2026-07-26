@@ -25,6 +25,10 @@ var serverCmd = &cobra.Command{
 	DisableFlagParsing: true,
 	Long: `Manage the Erii backend Java server.
 
+The server starts as a detached background process by default. Detached mode
+does not monitor the server or restart it after a crash; use a process
+supervisor when automatic recovery is required.
+
 Subcommands:
   start     Start the server
   stop      Stop a running server
@@ -37,8 +41,12 @@ Subcommands:
 }
 
 var serverStartCmd = &cobra.Command{
-	Use:                "start",
-	Short:              "Start the Erii backend server",
+	Use:   "start",
+	Short: "Start the Erii backend server",
+	Long: `Start the Erii backend server.
+
+By default the process is detached from the terminal. This is background-only
+mode, not process supervision: the CLI will not restart the server if it exits.`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if hasHelpFlag(args) {
@@ -81,8 +89,8 @@ func init() {
 	// DisableFlagParsing (to forward args to Java), so cobra does not parse
 	// them — passthroughArgs handles -f/--foreground manually. Registering
 	// them here makes them show up in `-h` output.
-	serverCmd.Flags().BoolP("foreground", "f", false, "Run in the foreground (do not daemonize)")
-	serverStartCmd.Flags().BoolP("foreground", "f", false, "Run in the foreground (do not daemonize)")
+	serverCmd.Flags().BoolP("foreground", "f", false, "Run in foreground instead of detached background mode")
+	serverStartCmd.Flags().BoolP("foreground", "f", false, "Run in foreground instead of detached background mode")
 
 	serverCmd.AddCommand(serverStartCmd)
 	serverCmd.AddCommand(serverStopCmd)
@@ -471,7 +479,7 @@ func daemonStart(w io.Writer, javaBin string, args []string, env []string) error
 	if err := writePidFile(pid); err != nil {
 		return fmt.Errorf("writing PID file: %w", err)
 	}
-	printServerResult(w, "Server started", "ok", "PID", strconv.Itoa(pid), "Mode", "background")
+	printServerResult(w, "Server started", "ok", "PID", strconv.Itoa(pid), "Mode", "detached (no auto-restart)")
 	return nil
 }
 
@@ -500,7 +508,7 @@ func daemonRestart(w io.Writer, javaBin string, args []string, env []string) err
 	if err := writePidFile(pid); err != nil {
 		return fmt.Errorf("writing PID file: %w", err)
 	}
-	printServerResult(w, "Server restarted", "ok", "PID", strconv.Itoa(pid), "Mode", "background")
+	printServerResult(w, "Server restarted", "ok", "PID", strconv.Itoa(pid), "Mode", "detached (no auto-restart)")
 	return nil
 }
 

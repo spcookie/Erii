@@ -37,6 +37,9 @@ var webCmd = &cobra.Command{
 	Short: "Manage the Erii web console",
 	Long: `Manage the web console that provides browser access to Erii TUI.
 
+The --daemon flag starts a detached background process only. It does not
+monitor the web console or restart it after a crash.
+
 Subcommands:
   start     Start the web console
   stop      Stop a background web console
@@ -50,6 +53,10 @@ Subcommands:
 var webStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the Erii web console",
+	Long: `Start the Erii web console.
+
+Use --daemon/-d to detach it from the terminal. Detached mode does not provide
+process monitoring or automatic restart.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runWebStart(cmd.OutOrStdout())
 	},
@@ -75,7 +82,13 @@ func init() {
 	webStartCmd.Flags().StringVar(&webPort, "port", "9527", "HTTP listen port")
 	webStartCmd.Flags().StringVar(&webHost, "host", "127.0.0.1", "HTTP listen host")
 	webStartCmd.Flags().StringVar(&webToken, "token", "", "Custom access token (default: random generated)")
-	webStartCmd.Flags().BoolVarP(&webDaemon, "daemon", "d", false, "Run in the background")
+	webStartCmd.Flags().BoolVarP(
+		&webDaemon,
+		"daemon",
+		"d",
+		false,
+		"Run as a detached background process (no monitoring or automatic restart)",
+	)
 
 	webCmd.AddCommand(webStartCmd)
 	webCmd.AddCommand(webStopCmd)
