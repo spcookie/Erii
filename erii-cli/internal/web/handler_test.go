@@ -1,9 +1,19 @@
 package web
 
 import (
+	"net/http"
 	"reflect"
 	"testing"
 )
+
+func TestPluginProxyErrorStatusPreservesBackendHTTPError(t *testing.T) {
+	if got := pluginProxyErrorStatus(http.StatusGatewayTimeout); got != http.StatusGatewayTimeout {
+		t.Fatalf("pluginProxyErrorStatus(504) = %d, want 504", got)
+	}
+	if got := pluginProxyErrorStatus(0); got != http.StatusBadGateway {
+		t.Fatalf("pluginProxyErrorStatus(0) = %d, want 502", got)
+	}
+}
 
 func TestWSHandlerCommandArgsIncludesGlobalPathFlags(t *testing.T) {
 	h := &WSHandler{

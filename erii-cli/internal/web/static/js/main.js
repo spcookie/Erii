@@ -509,6 +509,17 @@
     let pluginMatchTimer = 0;
     let pluginMatchSeq = 0;
 
+    function decodePluginResponse(response) {
+        return response.json().catch(function () {
+            return {};
+        }).then(function (data) {
+            if (!response.ok) {
+                throw new Error(data.message || ('HTTP ' + response.status));
+            }
+            return data;
+        });
+    }
+
     function schedulePluginMatch() {
         if (pluginMatchTimer) clearTimeout(pluginMatchTimer);
         pluginMatchTimer = setTimeout(refreshPluginMatches, 180);
@@ -525,10 +536,7 @@
         const url = '/api/plugin/match?limit=20&query=' + encodeURIComponent(query);
         fetch(url, {
             headers: {'X-Erii-Token': token}
-        }).then(function (response) {
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            return response.json();
-        }).then(function (data) {
+        }).then(decodePluginResponse).then(function (data) {
             if (seq !== pluginMatchSeq) return;
             renderPluginMatches(data.matches || [], 'No matches.');
         }).catch(function (error) {
@@ -562,10 +570,7 @@
                 'X-Erii-Token': token
             },
             body: JSON.stringify({input: input})
-        }).then(function (response) {
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            return response.json();
-        }).then(function (data) {
+        }).then(decodePluginResponse).then(function (data) {
             hidePluginSendPanel(false);
             showPluginSendResult(input, data);
         }).catch(function (error) {

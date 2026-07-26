@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"erii-cli/internal/api"
+	internalpath "erii-cli/internal/path"
+
+	"github.com/spf13/cobra"
 )
 
 func TestPluginRefreshCommandShape(t *testing.T) {
@@ -29,6 +32,29 @@ func TestPluginRefreshCommandShape(t *testing.T) {
 	}
 	if pluginMatchCmd.Flags().Lookup("fromat") != nil {
 		t.Fatal("plugin match must not expose a --fromat compatibility flag")
+	}
+}
+
+func TestPluginCommandsReturnConnectionErrors(t *testing.T) {
+	previousEriiDir := internalpath.EriiDir
+	internalpath.EriiDir = t.TempDir()
+	defer func() { internalpath.EriiDir = previousEriiDir }()
+
+	tests := []struct {
+		name string
+		cmd  *cobra.Command
+		args []string
+	}{
+		{name: "refresh", cmd: pluginRefreshCmd},
+		{name: "send", cmd: pluginSendCmd, args: []string{"hello"}},
+		{name: "match", cmd: pluginMatchCmd, args: []string{"hello"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.cmd.RunE(test.cmd, test.args); err == nil {
+				t.Fatal("connection failure must be returned to Cobra")
+			}
+		})
 	}
 }
 

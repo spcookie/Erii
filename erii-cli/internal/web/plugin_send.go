@@ -42,7 +42,15 @@ func pluginSendHandler(token, eriiDir string) http.HandlerFunc {
 
 		result, err := client.SendPluginCli(request.Input)
 		if err != nil {
-			w.WriteHeader(http.StatusBadGateway)
+			statusCode := pluginProxyErrorStatus(0)
+			if result != nil {
+				statusCode = pluginProxyErrorStatus(result.HTTPStatus)
+			}
+			w.WriteHeader(statusCode)
+			if result != nil {
+				_ = json.NewEncoder(w).Encode(result)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"status":  "error",
 				"message": err.Error(),
@@ -52,4 +60,11 @@ func pluginSendHandler(token, eriiDir string) http.HandlerFunc {
 
 		_ = json.NewEncoder(w).Encode(result)
 	}
+}
+
+func pluginProxyErrorStatus(backendStatus int) int {
+	if backendStatus >= 400 && backendStatus <= 599 {
+		return backendStatus
+	}
+	return http.StatusBadGateway
 }

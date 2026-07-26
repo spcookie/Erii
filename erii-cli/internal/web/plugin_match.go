@@ -44,7 +44,15 @@ func pluginMatchHandler(token, eriiDir string) http.HandlerFunc {
 
 		result, err := client.MatchPluginCommands(query, limit)
 		if err != nil {
-			w.WriteHeader(http.StatusBadGateway)
+			statusCode := pluginProxyErrorStatus(0)
+			if result != nil {
+				statusCode = pluginProxyErrorStatus(result.HTTPStatus)
+			}
+			w.WriteHeader(statusCode)
+			if result != nil {
+				_ = json.NewEncoder(w).Encode(result)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"status":  "error",
 				"message": err.Error(),

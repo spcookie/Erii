@@ -50,8 +50,8 @@ func TestRefreshPluginsParsesErrorResponseBody(t *testing.T) {
 
 	client := &Client{baseURL: server.URL, http: server.Client()}
 	result, err := client.RefreshPlugins("")
-	if err != nil {
-		t.Fatalf("RefreshPlugins returned error: %v", err)
+	if err == nil {
+		t.Fatal("RefreshPlugins should return an error for HTTP 500")
 	}
 	if result.HTTPStatus != http.StatusInternalServerError {
 		t.Fatalf("HTTPStatus = %d, want %d", result.HTTPStatus, http.StatusInternalServerError)
@@ -132,6 +132,23 @@ func TestSendPluginCliUsesSendEndpoint(t *testing.T) {
 	}
 	if result.Echo != "echo-1" || result.Reply == nil || *result.Reply != "pong" {
 		t.Fatalf("echo/reply = %q/%v, want echo-1/pong", result.Echo, result.Reply)
+	}
+}
+
+func TestSendPluginCliReturnsStructuredBackendError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusGatewayTimeout)
+		_, _ = w.Write([]byte(`{"status":"error","message":"plugin event timed out","input":"slow","echo":"echo-1","reply":null}`))
+	}))
+	defer server.Close()
+
+	client := &Client{baseURL: server.URL, http: server.Client()}
+	result, err := client.SendPluginCli("slow")
+	if err == nil {
+		t.Fatal("SendPluginCli should return an error for HTTP 504")
+	}
+	if result == nil || result.HTTPStatus != http.StatusGatewayTimeout || result.Status != "error" {
+		t.Fatalf("result = %+v, want structured HTTP 504 error", result)
 	}
 }
 

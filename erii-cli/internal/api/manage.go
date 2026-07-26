@@ -247,6 +247,9 @@ func (c *Client) RefreshPlugins(pluginID string) (*PluginRefreshResponse, error)
 		return nil, err
 	}
 	result.HTTPStatus = statusCode
+	if statusCode >= 400 {
+		return &result, fmt.Errorf("HTTP %d: %s", statusCode, result.Message)
+	}
 	return &result, nil
 }
 

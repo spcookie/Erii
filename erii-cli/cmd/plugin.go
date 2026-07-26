@@ -32,14 +32,12 @@ var pluginRefreshCmd = &cobra.Command{
 
 		client, err := api.NewClientFromIPC()
 		if err != nil {
-			fmt.Fprint(cmd.OutOrStdout(), uioutput.ErrorResult("Plugin refresh", "Connection", err))
-			return nil
+			return fmt.Errorf("plugin refresh connection: %w", err)
 		}
 
 		result, err := client.RefreshPlugins(pluginID)
 		if err != nil {
-			fmt.Fprint(cmd.OutOrStdout(), uioutput.ErrorResult("Plugin refresh", "Backend", err))
-			return nil
+			return fmt.Errorf("plugin refresh backend: %w", err)
 		}
 
 		fmt.Fprint(cmd.OutOrStdout(), renderPluginRefreshResult(result))
@@ -55,14 +53,12 @@ var pluginSendCmd = &cobra.Command{
 		input := strings.Join(args, " ")
 		client, err := api.NewClientFromIPC()
 		if err != nil {
-			fmt.Fprint(cmd.OutOrStdout(), uioutput.ErrorResult("Plugin send", "Connection", err))
-			return nil
+			return fmt.Errorf("plugin send connection: %w", err)
 		}
 
 		result, err := client.SendPluginCli(input)
 		if err != nil {
-			fmt.Fprint(cmd.OutOrStdout(), uioutput.ErrorResult("Plugin send", "Backend", err))
-			return nil
+			return fmt.Errorf("plugin send backend: %w", err)
 		}
 
 		fmt.Fprint(cmd.OutOrStdout(), renderPluginSendResult(result))
@@ -86,14 +82,12 @@ var pluginMatchCmd = &cobra.Command{
 
 		client, err := api.NewClientFromIPC()
 		if err != nil {
-			fmt.Fprint(cmd.OutOrStdout(), uioutput.ErrorResult("Plugin match", "Connection", err))
-			return nil
+			return fmt.Errorf("plugin match connection: %w", err)
 		}
 
 		result, err := client.MatchPluginCommands(query, 20)
 		if err != nil {
-			fmt.Fprint(cmd.OutOrStdout(), uioutput.ErrorResult("Plugin match", "Backend", err))
-			return nil
+			return fmt.Errorf("plugin match backend: %w", err)
 		}
 
 		if format == "json" {
