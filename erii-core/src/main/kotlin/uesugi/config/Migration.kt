@@ -56,6 +56,11 @@ fun migration(database: Database) {
                 }
             }
         }
+
+        // 兼容旧版 facts 表：旧列使用了带引号的小写名称 "values"。
+        // H2 对带引号标识符区分大小写，未加引号的 DROP values 实际查找的是 VALUES，无法删除旧列。
+        exec("ALTER TABLE memory_facts ADD COLUMN IF NOT EXISTS entities TEXT DEFAULT '[]' NOT NULL")
+        exec("ALTER TABLE memory_facts DROP COLUMN IF EXISTS \"values\"")
     }
 }
 
@@ -82,7 +87,7 @@ private fun init(database: Database) {
         exec("ALTER TABLE memory_facts ADD COLUMN IF NOT EXISTS entities TEXT DEFAULT '[]' NOT NULL")
         // 清理从 values 重命名为 entities 后遗留的旧列
         try {
-            exec("ALTER TABLE memory_facts DROP COLUMN IF EXISTS values")
+            exec("ALTER TABLE memory_facts DROP COLUMN IF EXISTS \"values\"")
         } catch (_: ExposedSQLException) {
             // 列不存在（新数据库），忽略
         }

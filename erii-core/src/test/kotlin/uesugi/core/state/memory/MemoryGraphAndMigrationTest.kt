@@ -28,8 +28,14 @@ class MemoryGraphAndMigrationTest {
 
         migration(database)
 
-        val record = MemoryRepository().getValidFacts("bot-a", "group-a").single()
-        assertEquals(emptyList(), record.entities)
+        val repository = MemoryRepository()
+        val legacy = repository.getValidFacts("bot-a", "group-a").single()
+        assertEquals(emptyList(), legacy.entities)
+
+        val createdId = repository.createFact(
+            "bot-a", "group-a", "new", "new fact", listOf("entity"), "user-a", Scopes.USER
+        )
+        assertEquals(listOf("entity"), repository.getValidFacts("bot-a", "group-a").single { it.id == createdId }.entities)
     }
 
     @Test
@@ -38,8 +44,14 @@ class MemoryGraphAndMigrationTest {
 
         migrationIf(false, database)
 
-        val record = MemoryRepository().getValidFacts("bot-a", "group-a").single()
-        assertEquals(emptyList(), record.entities)
+        val repository = MemoryRepository()
+        val legacy = repository.getValidFacts("bot-a", "group-a").single()
+        assertEquals(emptyList(), legacy.entities)
+
+        val createdId = repository.createFact(
+            "bot-a", "group-a", "new", "new fact", listOf("entity"), "user-a", Scopes.USER
+        )
+        assertEquals(listOf("entity"), repository.getValidFacts("bot-a", "group-a").single { it.id == createdId }.entities)
     }
 
     @Test
