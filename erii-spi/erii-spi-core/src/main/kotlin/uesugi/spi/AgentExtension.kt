@@ -342,12 +342,6 @@ interface Database {
 interface Server {
     val contextUrl: URLBuilder
 
-    /**
-     * Registers the first path segment below `/plugin` used by this server.
-     *
-     * Calling this method is optional. The extension name is used when no custom prefix is registered, or when the
-     * requested prefix is already owned by another extension.
-     */
     fun registerPrefix(prefix: String)
 
     fun route(conf: Route.() -> Unit)
