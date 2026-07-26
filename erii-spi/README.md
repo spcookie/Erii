@@ -242,6 +242,10 @@ KSP 处理时机：发现 `@file:Definition` 的文件。
 
 > 这些函数必须在 `withPluginContext {}` 或扩展处理器等框架管理的协程中调用，否则抛出 `NO_CONTEXT_ERROR`。
 
+自定义 HTTP 前缀时必须先调用 `server.registerPrefix(prefix)`，再读取 `server.contextUrl` 或生成 HTML
+资源地址，最后调用 `server.route {}`。`contextUrl` 反映读取当时的有效前缀；若自定义前缀冲突，框架会降级到
+插件默认名称，因此不要手工拼接请求前缀。
+
 CLI/Web 插件发送会触发 `CliPluginEvent(input, echo)`；插件如需返回同步结果，可以发布同 `echo` 的
 `CliPluginReplyEvent(echo, message)`。Core 会取最后一条匹配回复作为 send 返回值；没有回复时返回 `null`。
 整个同步事件分发最多等待 5 秒；超时返回 HTTP 504，任一处理器失败返回 HTTP 500。
