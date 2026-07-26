@@ -149,9 +149,9 @@ class KspAnnotationProcessor(
         generatePluginDelegate(pkgName, defAnno, onStartFuncs.firstOrNull(), onStopFuncs.firstOrNull())
         // KAPT PluginDefinitionProcessor generates plugin.properties from @PluginDefinition annotation
         generateToolSets(toolFunctions, pkgName)
-        generateRouteExtensions(routeFunctions, pkgName, namedOnLoad, namedOnUnload, globalOnLoad, globalOnUnload, globalOnEvent)
-        generateCmdExtensions(cmdFunctions, pkgName, namedOnLoad, namedOnUnload, globalOnLoad, globalOnUnload, globalOnEvent)
-        generatePassiveExtensions(passiveFunctions, pkgName, namedOnLoad, namedOnUnload, globalOnLoad, globalOnUnload, globalOnEvent)
+        generateRouteExtensions(routeFunctions, pkgName, namedOnLoad, namedOnUnload, globalOnLoad, globalOnUnload, emptyList())
+        generateCmdExtensions(cmdFunctions, pkgName, namedOnLoad, namedOnUnload, globalOnLoad, globalOnUnload, emptyList())
+        generatePassiveExtensions(passiveFunctions, pkgName, namedOnLoad, namedOnUnload, globalOnLoad, globalOnUnload, emptyList())
 
         val hasLifecycle = globalOnLoad.isNotEmpty() || globalOnUnload.isNotEmpty() || globalOnEvent.isNotEmpty()
         val hasExtension = routeFunctions.isNotEmpty() || cmdFunctions.isNotEmpty() || passiveFunctions.isNotEmpty()
@@ -159,8 +159,19 @@ class KspAnnotationProcessor(
         if (needsDefaultPassive) {
             generateDefaultPassive(toolFunctions, pkgName, globalOnLoad, globalOnUnload, globalOnEvent)
         }
+        val needsEventPassive = hasExtension && globalOnEvent.isNotEmpty()
+        if (needsEventPassive) {
+            generateEventPassive(pkgName, globalOnEvent)
+        }
 
-        generatePf4jExtensionsFile(routeFunctions, cmdFunctions, passiveFunctions, pkgName, needsDefaultPassive)
+        generatePf4jExtensionsFile(
+            routeFunctions,
+            cmdFunctions,
+            passiveFunctions,
+            pkgName,
+            needsDefaultPassive,
+            needsEventPassive,
+        )
 
         processed = true
         return emptyList()
@@ -562,7 +573,7 @@ class KspAnnotationProcessor(
             .filter { it in availableToolSets }
             .map { toolSetClassName(it) }
 
-        val hasLifecycle = globalOnLoad.isNotEmpty() || globalOnUnload.isNotEmpty()
+        val hasLifecycle = globalOnLoad.isNotEmpty() || globalOnUnload.isNotEmpty() || globalOnEvent.isNotEmpty()
         val className = "GeneratedPassive_default"
 
         val content = buildString {
@@ -602,6 +613,31 @@ class KspAnnotationProcessor(
         writeFile(pkgName, className, content)
     }
 
+    private fun generateEventPassive(
+        pkgName: String,
+        globalOnEvent: List<String>,
+    ) {
+        val className = "GeneratedPassive_events"
+        val content = buildString {
+            appendLine("package $pkgName")
+            appendLine()
+            appendLine("import org.pf4j.Extension")
+            appendLine("import uesugi.spi.PassiveExtension")
+            appendLine("import uesugi.spi.PluginContext")
+            appendLine("import uesugi.spi.annotation.withPluginContext")
+            appendLine()
+            appendLine("@Extension")
+            appendLine("class $className : PassiveExtension<GeneratedPlugin> {")
+            appendLine("    override fun onLoad(context: PluginContext) {")
+            emitLifecycleCalls(globalOnEvent, "        ")
+            appendLine("    }")
+            appendLine()
+            appendLine("    override fun onUnload() = Unit")
+            appendLine("}")
+        }
+        writeFile(pkgName, className, content)
+    }
+
     // ========== PF4J Extensions file ==========
 
     private fun generatePf4jExtensionsFile(
@@ -610,6 +646,7 @@ class KspAnnotationProcessor(
         passiveFunctions: List<KSFunctionDeclaration>,
         pkgName: String,
         needsDefaultPassive: Boolean,
+        needsEventPassive: Boolean,
     ) {
         val extensionClasses = buildList {
             for (func in routeFunctions) {
@@ -624,6 +661,9 @@ class KspAnnotationProcessor(
             }
             if (needsDefaultPassive) {
                 add("$pkgName.GeneratedPassive_default")
+            }
+            if (needsEventPassive) {
+                add("$pkgName.GeneratedPassive_events")
             }
         }
 
@@ -804,7 +844,8 @@ class KspAnnotationProcessor(
             logger.error("@OnEvent function '$funcName': cannot resolve event type from annotation value")
             "Any"
         }
-        return "context.onEvent { event -> if (event is $eventTypeName) { $funcName(event) } }"
+        return "context.onEvent { event -> if (event is $eventTypeName) { " +
+            "withPluginContext(context) { $funcName(event) } } }"
     }
 
     /** Extracts a KClass annotation argument as KSType. */

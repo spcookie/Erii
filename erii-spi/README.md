@@ -217,7 +217,7 @@ KSP 处理时机：发现 `@file:Definition` 的文件。
 | 仅 `@LLMTool`                           | 生成 `GeneratedPassive_default` + `GeneratedToolSet_xxx` |
 | 仅 `@OnLoad` / `@OnUnload` / `@OnEvent` | 生成 `GeneratedPassive_default` 承载生命周期                   |
 | `@LLMTool` + 生命周期（无扩展）                 | 生成一个 `GeneratedPassive_default`，含工具注册和生命周期调用           |
-| 同时有扩展 + 工具 + 生命周期                      | 各扩展各自承载，工具注册到关联扩展                                      |
+| 同时有扩展 + 工具 + 生命周期                      | 工具注册到关联扩展；`@OnEvent` 由单独的事件扩展统一承载                          |
 
 ---
 
@@ -244,6 +244,8 @@ KSP 处理时机：发现 `@file:Definition` 的文件。
 
 CLI/Web 插件发送会触发 `CliPluginEvent(input, echo)`；插件如需返回同步结果，可以发布同 `echo` 的
 `CliPluginReplyEvent(echo, message)`。Core 会取最后一条匹配回复作为 send 返回值；没有回复时返回 `null`。
+整个同步事件分发最多等待 5 秒；超时返回 HTTP 504，任一处理器失败返回 HTTP 500。
+事件执行池饱和时返回 HTTP 503，避免插件阻塞持续占用 Ktor 请求线程。
 
 ### Meta 字段
 
