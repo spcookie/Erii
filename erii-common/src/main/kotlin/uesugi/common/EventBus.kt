@@ -7,6 +7,17 @@ import kotlinx.coroutines.flow.*
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.reflect.KClass
 
+class EventDispatchException(
+    failures: List<Throwable>,
+) : RuntimeException(
+    "${failures.size} event subscriber(s) failed",
+    failures.firstOrNull(),
+) {
+    init {
+        failures.drop(1).forEach(::addSuppressed)
+    }
+}
+
 @Suppress("UNCHECKED_CAST", "UNUSED")
 object EventBus {
 
@@ -66,15 +77,35 @@ object EventBus {
         // CopyOnWriteArrayList 允许在遍历时无需加锁，性能更好且避免 ConcurrentModificationException
         private val subscribers = CopyOnWriteArrayList<Subscriber>()
 
-        fun post(event: Any) {
-            // CopyOnWriteArrayList 迭代是线程安全的，不需要 snapshot 副本
+        private fun postAndCollectFailures(event: Any): List<Throwable> {
+            val failures = mutableListOf<Throwable>()
             subscribers.forEach { sub ->
                 if (sub.kClass.isInstance(event)) {
-                    sub.callback(event)
-                    if (sub.once) {
-                        subscribers.remove(sub)
+                    try {
+                        sub.callback(event)
+                    } catch (failure: Exception) {
+                        if (failure is InterruptedException || Thread.currentThread().isInterrupted) {
+                            throw failure
+                        }
+                        failures += failure
+                    } finally {
+                        if (sub.once) {
+                            subscribers.remove(sub)
+                        }
                     }
                 }
+            }
+            return failures
+        }
+
+        fun post(event: Any) {
+            postAndCollectFailures(event).forEach(Throwable::printStackTrace)
+        }
+
+        fun postOrThrow(event: Any) {
+            val failures = postAndCollectFailures(event)
+            if (failures.isNotEmpty()) {
+                throw EventDispatchException(failures)
             }
         }
 
@@ -86,14 +117,7 @@ object EventBus {
             val subscriber = Subscriber(
                 kClass = kClass,
                 once = once,
-                callback = { event ->
-                    // 这里的 try-catch 防止回调报错中断整个 post 循环
-                    try {
-                        onEvent(event as T)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                },
+                callback = { event -> onEvent(event as T) },
                 originalRef = onEvent // 保存原始引用
             )
             subscribers.add(subscriber)
@@ -129,6 +153,9 @@ object EventBus {
     fun unsubscribeAsync(job: Job) = job.cancel()
 
     fun postSync(event: Any) = SyncBus.post(event)
+
+    /** Dispatches to every matching synchronous subscriber and reports all subscriber failures to the caller. */
+    fun postSyncOrThrow(event: Any) = SyncBus.postOrThrow(event)
 
     inline fun <reified T : Any> subscribeSync(
         noinline onEvent: (T) -> Unit
