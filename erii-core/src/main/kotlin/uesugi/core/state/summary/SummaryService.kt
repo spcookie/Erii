@@ -37,19 +37,15 @@ class SummaryService(
             val summaryState = withContext(Dispatchers.IO) {
                 summaryRepository.getSummaryState(botMark, groupId)
             }
-            if (summaryState == null) {
-                val latestId = withContext(Dispatchers.IO) {
-                    summaryRepository.latestHistoryId(botMark, groupId)
-                } ?: return StateWorkResult(0, 0, false)
-                withContext(Dispatchers.IO) {
-                    summaryRepository.updateSummaryState(botMark, groupId, latestId)
-                }
-                return StateWorkResult(0, latestId, false)
-            }
-            val lastId = summaryState.lastProcessedHistoryId
+            val initialBatch = summaryState == null
+            val lastId = summaryState?.lastProcessedHistoryId ?: 0
 
             val histories = withContext(Dispatchers.IO) {
-                summaryRepository.getHistoriesToProcess(botMark, groupId, lastId, batchLimit)
+                if (initialBatch) {
+                    summaryRepository.getLatestHistories(botMark, groupId, batchLimit)
+                } else {
+                    summaryRepository.getHistoriesToProcess(botMark, groupId, lastId, batchLimit)
+                }
             }
 
             if (histories.isEmpty()) {
@@ -74,7 +70,11 @@ class SummaryService(
                 withContext(Dispatchers.IO) {
                     summaryRepository.updateSummaryState(botMark, groupId, maxHistoryId)
                 }
-                return StateWorkResult(histories.size, maxHistoryId, histories.size == batchLimit)
+                return StateWorkResult(
+                    histories.size,
+                    maxHistoryId,
+                    hasMore = !initialBatch && histories.size == batchLimit
+                )
             }
 
             // 3. 生成摘要
@@ -86,7 +86,11 @@ class SummaryService(
             }
 
             log.debug("群组 $groupId 对话摘要生成完成")
-            return StateWorkResult(histories.size, maxHistoryId, histories.size == batchLimit)
+            return StateWorkResult(
+                histories.size,
+                maxHistoryId,
+                hasMore = !initialBatch && histories.size == batchLimit
+            )
 
         } catch (e: Exception) {
             log.error("处理群组 $groupId 对话摘要失败", e)

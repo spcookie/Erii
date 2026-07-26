@@ -5,14 +5,13 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 class StateWorkCoordinatorTest {
     @Test
     fun `signals are coalesced until debounce expires`() = runBlocking {
         val processor = FakeProcessor()
-        val coordinator = coordinator(processor, minimum = 2, debounceMs = 30, maxWaitMs = 120)
+        val coordinator = coordinator(processor, minimum = 2, debounceMs = 30)
         val key = StateWorkKey("bot", "group", StateWorkKind.MEMORY)
 
         coordinator.signal(key)
@@ -25,15 +24,15 @@ class StateWorkCoordinatorTest {
     }
 
     @Test
-    fun `max wait runs work below the message threshold`() = runBlocking {
+    fun `work below message threshold does not run solely because time passes`() = runBlocking {
         val processor = FakeProcessor()
-        val coordinator = coordinator(processor, minimum = 5, debounceMs = 10, maxWaitMs = 45)
+        val coordinator = coordinator(processor, minimum = 5, debounceMs = 10)
         val key = StateWorkKey("bot", "group", StateWorkKind.MEMORY)
 
         coordinator.signal(key)
-        await { processor.calls.get() == 1 }
+        delay(100)
 
-        assertTrue(processor.forced[0] == true)
+        assertEquals(0, processor.calls.get())
         coordinator.close()
     }
 
@@ -41,12 +40,46 @@ class StateWorkCoordinatorTest {
     fun `reconciliation restores work when an event signal was lost`() = runBlocking {
         val key = StateWorkKey("bot", "group", StateWorkKind.MEMORY)
         val processor = FakeProcessor(pending = setOf(key))
-        val coordinator = coordinator(processor, minimum = 5, debounceMs = 10, maxWaitMs = 35)
+        val coordinator = coordinator(processor, minimum = 5, debounceMs = 10)
 
         coordinator.reconcile()
         await { processor.calls.get() == 1 }
 
-        assertTrue(processor.forced[0] == true)
+        assertEquals(false, processor.forced[0])
+        coordinator.close()
+    }
+
+    @Test
+    fun `repeated reconciliation checks small backlog without invoking model`() = runBlocking {
+        val key = StateWorkKey("bot", "group", StateWorkKind.MEMORY)
+        val checks = AtomicInteger()
+        val modelCalls = AtomicInteger()
+        val processor = object : StateWorkProcessor {
+            override val kind = StateWorkKind.MEMORY
+            override fun accepts(record: uesugi.common.data.HistoryRecord): Boolean = true
+            override fun pendingKeys(): Set<StateWorkKey> = setOf(key)
+
+            override suspend fun process(
+                key: StateWorkKey,
+                policy: StateWorkPolicy,
+                force: Boolean
+            ): StateWorkResult {
+                checks.incrementAndGet()
+                if (force || 2 >= policy.minMessages) {
+                    modelCalls.incrementAndGet()
+                }
+                return StateWorkResult(0, null, false)
+            }
+        }
+        val coordinator = coordinator(processor, minimum = 5, debounceMs = 10)
+
+        repeat(3) { index ->
+            coordinator.reconcile()
+            await { checks.get() == index + 1 }
+        }
+
+        assertEquals(3, checks.get())
+        assertEquals(0, modelCalls.get())
         coordinator.close()
     }
 
@@ -121,27 +154,30 @@ class StateWorkCoordinatorTest {
         coordinator.signal(StateWorkKey("bot", "group", StateWorkKind.MEME_COLLECT))
         await { analyzerCalls.get() == 1 }
 
-        assertEquals(1, analyzerForced.get())
+        assertEquals(0, analyzerForced.get())
         coordinator.close()
     }
 
     @Test
     fun `sequential work immediately continues while more batches remain`() = runBlocking {
         val processor = FakeProcessor(hasMoreForCalls = 2)
-        val coordinator = coordinator(processor, minimum = 1, debounceMs = 5, maxWaitMs = 20)
+        val coordinator = coordinator(processor, minimum = 1, debounceMs = 5)
         val key = StateWorkKey("bot", "group", StateWorkKind.MEMORY)
 
         coordinator.signal(key)
         await { processor.calls.get() == 3 }
 
         assertEquals(3, processor.calls.get())
+        assertEquals(false, processor.forced[0])
+        assertEquals(true, processor.forced[1])
+        assertEquals(true, processor.forced[2])
         coordinator.close()
     }
 
     @Test
     fun `same key never processes concurrently`() = runBlocking {
         val processor = FakeProcessor(processDelayMs = 35, hasMoreForCalls = 1)
-        val coordinator = coordinator(processor, minimum = 1, debounceMs = 5, maxWaitMs = 20)
+        val coordinator = coordinator(processor, minimum = 1, debounceMs = 5)
         val key = StateWorkKey("bot", "group", StateWorkKind.MEMORY)
 
         coordinator.signal(key)
@@ -160,7 +196,6 @@ class StateWorkCoordinatorTest {
             processor = processor,
             minimum = 1,
             debounceMs = 1,
-            maxWaitMs = 10,
             maxConcurrency = 2
         )
 
@@ -181,7 +216,6 @@ class StateWorkCoordinatorTest {
             processor = processor,
             minimum = 1,
             debounceMs = 1,
-            maxWaitMs = 10,
             retryDelayMs = 5
         )
         val key = StateWorkKey("bot", "group", StateWorkKind.MEMORY)
@@ -190,6 +224,8 @@ class StateWorkCoordinatorTest {
         await { processor.calls.get() == 2 }
 
         assertEquals(2, processor.calls.get())
+        assertEquals(false, processor.forced[0])
+        assertEquals(true, processor.forced[1])
         coordinator.close()
     }
 
@@ -200,7 +236,6 @@ class StateWorkCoordinatorTest {
             processor = processor,
             minimum = 1,
             debounceMs = 1,
-            maxWaitMs = 10,
             retryDelayMs = 60
         )
         val key = StateWorkKey("bot", "group", StateWorkKind.MEMORY)
@@ -219,7 +254,6 @@ class StateWorkCoordinatorTest {
         processor: StateWorkProcessor,
         minimum: Int,
         debounceMs: Long,
-        maxWaitMs: Long,
         maxConcurrency: Int = 2,
         retryDelayMs: Long = 5
     ) = StateWorkCoordinator(

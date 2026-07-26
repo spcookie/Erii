@@ -10,23 +10,11 @@ class StateDispatchJob(
 ) {
     private val log = logger()
 
-    private val legacyRecurringJobIds = listOf(
-        "emotion-job",
-        "flow-job",
-        "volition-job",
-        "memory-job",
-        "summary-job",
-        "evolution-job",
-        "meme-collect-job",
-        "meme-extract-job"
-    )
-
     fun open() {
         val profile = ConfigHolder.getStateTuning().dispatch.profile
         val minutes = profile.reconciliationInterval.inWholeMinutes.coerceAtLeast(1)
         val cron = if (minutes == 1L) "* * * * *" else "*/$minutes * * * *"
 
-        removeLegacyRecurringJobs()
         coordinator.start()
         coordinator.reconcile()
         jobScheduler.scheduleRecurrently(
@@ -39,12 +27,5 @@ class StateDispatchJob(
 
     fun reconcile() {
         coordinator.reconcile()
-    }
-
-    private fun removeLegacyRecurringJobs() {
-        legacyRecurringJobIds.forEach { id ->
-            runCatching { jobScheduler.deleteRecurringJob(id) }
-                .onFailure { error -> log.warn("Failed to remove legacy state job $id", error) }
-        }
     }
 }

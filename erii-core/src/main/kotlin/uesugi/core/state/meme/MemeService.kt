@@ -342,8 +342,6 @@ class MemeService(
     /**
      * 获取群组中最近的图片消息及其MD5
      *
-     * 注意：此方法已移至 [MemeRepository]
-     *
      * @deprecated 使用 [MemeRepository.getRecentImageMessages] 代替
      */
     fun getRecentImageMessages(

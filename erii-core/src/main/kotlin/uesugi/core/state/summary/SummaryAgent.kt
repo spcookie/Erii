@@ -25,7 +25,11 @@ data class SummaryAnalysis(
     val messageCount: Int
 )
 
-class SummaryAgent {
+class SummaryAgent internal constructor(
+    private val promptExecutorProvider: () -> PromptExecutor
+) {
+
+    constructor() : this({ ref<PromptExecutor>().value })
 
     companion object {
         private val log = logger()
@@ -109,7 +113,7 @@ class SummaryAgent {
             }
         }
 
-        val promptExecutor by ref<PromptExecutor>()
+        val promptExecutor = promptExecutorProvider()
 
         val result = promptExecutor.executeStructured<SummaryAnalysis>(
             prompt = prompt,

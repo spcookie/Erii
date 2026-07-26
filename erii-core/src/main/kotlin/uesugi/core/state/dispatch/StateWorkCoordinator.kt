@@ -47,7 +47,7 @@ class StateWorkCoordinator(
     private data class Pending(
         var lastSignalAtNanos: Long,
         var signalCount: Int,
-        var forced: Boolean,
+        var forceProcessor: Boolean,
         var scheduled: Job? = null
     )
 
@@ -77,14 +77,24 @@ class StateWorkCoordinator(
     }
 
     fun signal(key: StateWorkKey) {
-        schedule(key, increment = 1, force = false)
+        schedule(
+            key = key,
+            increment = 1,
+            bypassSignalThreshold = false,
+            forceProcessor = false
+        )
     }
 
     fun reconcile() {
         processorsByKind.values.forEach { processor ->
             try {
                 processor.pendingKeys().forEach { key ->
-                    schedule(key, increment = 0, force = false)
+                    schedule(
+                        key = key,
+                        increment = 0,
+                        bypassSignalThreshold = true,
+                        forceProcessor = false
+                    )
                 }
             } catch (error: Exception) {
                 log.error("State reconciliation failed, kind=${processor.kind}", error)
@@ -92,7 +102,12 @@ class StateWorkCoordinator(
         }
     }
 
-    private fun schedule(key: StateWorkKey, increment: Int, force: Boolean) {
+    private fun schedule(
+        key: StateWorkKey,
+        increment: Int,
+        bypassSignalThreshold: Boolean,
+        forceProcessor: Boolean
+    ) {
         val policy = policies[key.kind] ?: return
         if (key.kind !in processorsByKind) return
         val now = System.nanoTime()
@@ -102,11 +117,10 @@ class StateWorkCoordinator(
             }
             state.lastSignalAtNanos = now
             state.signalCount += increment
-            state.forced = state.forced || force
-            state.scheduled?.cancel()
+            state.forceProcessor = state.forceProcessor || forceProcessor
 
             val delayDuration = when {
-                state.forced -> Duration.ZERO
+                bypassSignalThreshold -> Duration.ZERO
                 state.signalCount >= policy.minMessages -> {
                     val debounceTarget = state.lastSignalAtNanos + policy.debounce.inWholeNanoseconds
                     (debounceTarget - now).coerceAtLeast(0).nanoseconds
@@ -114,6 +128,7 @@ class StateWorkCoordinator(
 
                 else -> return
             }
+            state.scheduled?.cancel()
             state.scheduled = scope.launch {
                 delay(delayDuration)
                 runKey(key)
@@ -127,23 +142,40 @@ class StateWorkCoordinator(
         } ?: return
         val processor = processorsByKind[key.kind] ?: return
         val policy = policies[key.kind] ?: return
-        val force = state.forced
+        val forceProcessor = state.forceProcessor
         val lock = keyLocks.computeIfAbsent(key) { Mutex() }
 
         lock.withLock {
             semaphore.withPermit {
                 try {
-                    val result = processor.process(key, policy, force)
+                    val result = processor.process(key, policy, forceProcessor)
                     retries.remove(key)
-                    log.debug(
-                        "State work completed, kind={}, botId={}, groupId={}, processed={}, cursor={}, hasMore={}",
-                        key.kind, key.botId, key.groupId, result.processedCount, result.cursor, result.hasMore
-                    )
+                    if (result.processedCount > 0) {
+                        log.info(
+                            "State work completed, kind={}, botId={}, groupId={}, processed={}, cursor={}, hasMore={}",
+                            key.kind, key.botId, key.groupId, result.processedCount, result.cursor, result.hasMore
+                        )
+                    } else {
+                        log.debug(
+                            "State work checked, kind={}, botId={}, groupId={}, processed=0, cursor={}, hasMore={}",
+                            key.kind, key.botId, key.groupId, result.cursor, result.hasMore
+                        )
+                    }
                     if (result.hasMore && policy.backlogMode == BacklogMode.SEQUENTIAL) {
-                        schedule(key, increment = 0, force = true)
+                        schedule(
+                            key = key,
+                            increment = 0,
+                            bypassSignalThreshold = true,
+                            forceProcessor = true
+                        )
                     }
                     result.wakeKinds.forEach { kind ->
-                        schedule(key.copy(kind = kind), increment = 0, force = false)
+                        schedule(
+                            key = key.copy(kind = kind),
+                            increment = 0,
+                            bypassSignalThreshold = true,
+                            forceProcessor = false
+                        )
                     }
                 } catch (error: CancellationException) {
                     throw error
@@ -164,7 +196,12 @@ class StateWorkCoordinator(
         scope.launch {
             delay(retryDelay)
             if (retries[key] == attempt) {
-                schedule(key, increment = 0, force = true)
+                schedule(
+                    key = key,
+                    increment = 0,
+                    bypassSignalThreshold = true,
+                    forceProcessor = true
+                )
             }
         }
     }

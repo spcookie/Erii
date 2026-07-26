@@ -38,6 +38,12 @@ class StateCursorRepositoryTest {
         assertEquals(
             expected,
             VolitionRepository().getLatestHistoriesToProcess("bot-a", "group-a", cursor, 3).map { it.id.value })
+        assertEquals(
+            expected,
+            MemoryRepository().getLatestHistories("bot-a", "group-a", 3).map { it.id })
+        assertEquals(
+            expected,
+            SummaryRepository().getLatestHistories("bot-a", "group-a", 3).map { it.id })
     }
 
     @Test

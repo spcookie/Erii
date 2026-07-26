@@ -54,19 +54,15 @@ class MemoryService(
             val memoryState = withContext(Dispatchers.IO) {
                 memoryRepository.getMemoryState(botMark, groupId)
             }
-            if (memoryState == null) {
-                val latestId = withContext(Dispatchers.IO) {
-                    memoryRepository.latestHistoryId(botMark, groupId)
-                } ?: return StateWorkResult(0, 0, false)
-                withContext(Dispatchers.IO) {
-                    memoryRepository.updateMemoryState(botMark, groupId, latestId)
-                }
-                return StateWorkResult(0, latestId, false)
-            }
-            val lastId = memoryState.lastProcessedHistoryId
+            val initialBatch = memoryState == null
+            val lastId = memoryState?.lastProcessedHistoryId ?: 0
 
             val histories = withContext(Dispatchers.IO) {
-                memoryRepository.getHistoriesToProcess(botMark, groupId, lastId, batchLimit)
+                if (initialBatch) {
+                    memoryRepository.getLatestHistories(botMark, groupId, batchLimit)
+                } else {
+                    memoryRepository.getHistoriesToProcess(botMark, groupId, lastId, batchLimit)
+                }
             }
 
             if (histories.isEmpty()) {
@@ -93,7 +89,11 @@ class MemoryService(
                 withContext(Dispatchers.IO) {
                     memoryRepository.updateMemoryState(botMark, groupId, maxHistoryId)
                 }
-                return StateWorkResult(histories.size, maxHistoryId, histories.size == batchLimit)
+                return StateWorkResult(
+                    histories.size,
+                    maxHistoryId,
+                    hasMore = !initialBatch && histories.size == batchLimit
+                )
             }
 
             // 3. 按用户分组
@@ -130,7 +130,11 @@ class MemoryService(
             }
 
             log.debug("群组 $groupId 记忆处理完成, 最大 historyId=$maxHistoryId")
-            return StateWorkResult(histories.size, maxHistoryId, histories.size == batchLimit)
+            return StateWorkResult(
+                histories.size,
+                maxHistoryId,
+                hasMore = !initialBatch && histories.size == batchLimit
+            )
 
         } catch (e: Exception) {
             log.error("处理群组 $groupId 记忆失败", e)

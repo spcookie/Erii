@@ -24,7 +24,7 @@ class StateTriggerProfileTest {
     @Test
     fun `realtime policies match the configured profile`() {
         assertEquals(
-            expectedPolicies(15.seconds, 1.minutes, 20, 20, 5.minutes, 30, 30.seconds, 5.minutes, 100, 15.minutes),
+            expectedPolicies(15.seconds, 20, 20, 30, 30.seconds, 100),
             StateTriggerProfile.REALTIME.policies()
         )
         assertEquals(1.minutes, StateTriggerProfile.REALTIME.reconciliationInterval)
@@ -33,7 +33,7 @@ class StateTriggerProfileTest {
     @Test
     fun `balanced policies match the configured profile`() {
         assertEquals(
-            expectedPolicies(30.seconds, 3.minutes, 30, 30, 15.minutes, 60, 1.minutes, 30.minutes, 200, 30.minutes),
+            expectedPolicies(30.seconds, 30, 30, 60, 1.minutes, 200),
             StateTriggerProfile.BALANCED.policies()
         )
         assertEquals(3.minutes, StateTriggerProfile.BALANCED.reconciliationInterval)
@@ -42,7 +42,7 @@ class StateTriggerProfileTest {
     @Test
     fun `economy policies match the configured profile`() {
         assertEquals(
-            expectedPolicies(1.minutes, 5.minutes, 50, 50, 30.minutes, 100, 2.minutes, 60.minutes, 300, 60.minutes),
+            expectedPolicies(1.minutes, 50, 50, 100, 2.minutes, 300),
             StateTriggerProfile.ECONOMY.policies()
         )
         assertEquals(5.minutes, StateTriggerProfile.ECONOMY.reconciliationInterval)
@@ -50,15 +50,11 @@ class StateTriggerProfileTest {
 
     private fun expectedPolicies(
         debounce: kotlin.time.Duration,
-        realtimeWait: kotlin.time.Duration,
         emotionMinimum: Int,
         realtimeMinimum: Int,
-        knowledgeWait: kotlin.time.Duration,
         knowledgeMinimum: Int,
         memeDelay: kotlin.time.Duration,
-        memeAnalysisWait: kotlin.time.Duration,
-        evolutionMinimum: Int,
-        evolutionWait: kotlin.time.Duration
+        evolutionMinimum: Int
     ) = mapOf(
         StateWorkKind.EMOTION to StateWorkPolicy(BacklogMode.LATEST_WINDOW, debounce, emotionMinimum, 200),
         StateWorkKind.FLOW to StateWorkPolicy(BacklogMode.LATEST_WINDOW, debounce, realtimeMinimum, 100),

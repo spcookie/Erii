@@ -11,7 +11,6 @@ import kotlinx.serialization.Serializable
 import uesugi.common.LLMModelChoice
 import uesugi.common.data.HistoryRecord
 import uesugi.common.toolkit.logger
-import uesugi.common.toolkit.ref
 import uesugi.core.message.history.asLlmPrompt
 import kotlin.time.ExperimentalTime
 
@@ -259,8 +258,6 @@ class MemoryAgent(
                 })
             }
         }
-
-        val promptExecutor by ref<PromptExecutor>()
 
         val result = promptExecutor.executeStructured<UserProfileAnalysis>(
             prompt = prompt,

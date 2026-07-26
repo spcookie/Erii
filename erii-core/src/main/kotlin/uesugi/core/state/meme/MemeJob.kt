@@ -26,7 +26,6 @@ import uesugi.core.state.dispatch.StateWorkResult
  * 表情包调度任务
  *
  * 整合了表情包收集和提取两个任务：
- * 1. 收集任务 [doCollecting]: 扫描历史消息中的图片，收集表情包
  * 2. 提取任务 [doExtracting]: 分析待处理的表情包，提取描述、用途、标签
  *
  * 收集与提取由状态协调器触发，清理仍由 Cron 执行。
@@ -63,43 +62,6 @@ class MemeJob(
         )
 
         log.info("Meme event processors initialized, cleanup: daily at 03:00")
-    }
-
-    /**
-     * 执行表情包收集任务
-     *
-     * 扫描历史消息中的图片：
-     * 1. 如果 md5 已存在，追加上下文，计数+1
-     * 2. 如果 md5 不存在，创建新记录
-     * 3. 累计计数达到3后，标记待分析
-     *
-     * 使用扫描状态表记录最后扫描的 history id，避免重复扫描
-     */
-    fun doCollecting() {
-        runBlocking {
-            if (mutex.tryLock()) {
-                try {
-                    log.debug("表情包收集任务开始执行")
-
-                    for (botId in BotManage.getAllBotIds()) {
-                        val configKey = BotManage.getConfigKey(botId)
-                        val groups = ConfigHolder.getEffectiveEnableGroups(configKey)
-                        log.debug("需要收集的群组: ${groups.size} 个")
-                        for (groupId in groups) {
-                            processGroupCollection(botId, groupId)
-                        }
-                    }
-
-                    log.debug("表情包收集任务执行完成")
-                } catch (e: Exception) {
-                    log.error("Emoticon collection task failed", e)
-                } finally {
-                    mutex.unlock()
-                }
-            } else {
-                log.debug("表情包收集任务正在执行中, 跳过本次调度")
-            }
-        }
     }
 
     /**

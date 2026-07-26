@@ -72,6 +72,21 @@ class SummaryRepository {
             .map { it.toRecord() }
     }
 
+    /**
+     * 获取最新一批历史消息，并按时间正序返回。
+     *
+     * 用于尚未建立处理游标的群组：只处理最新窗口，更早历史作为基线数据跳过。
+     */
+    fun getLatestHistories(botMark: String, groupId: String, limit: Int): List<HistoryRecord> = transaction {
+        HistoryEntity.find(
+            (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId)
+        )
+            .orderBy(HistoryTable.id to SortOrder.DESC)
+            .limit(limit)
+            .map { it.toRecord() }
+            .asReversed()
+    }
+
     fun updateSummaryState(botMark: String, groupId: String, lastHistoryId: Int) {
         transaction {
             val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
