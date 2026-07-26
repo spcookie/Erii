@@ -20,6 +20,9 @@ func TestInitPathsSetsMcpDir(t *testing.T) {
 	if got := ConfMetaDir; got != metaDir {
 		t.Fatalf("ConfMetaDir = %q, want %q", got, metaDir)
 	}
+	if got, want := PluginSchemaDir, filepath.Join(metaDir, "plugin-config", "schema"); got != want {
+		t.Fatalf("PluginSchemaDir = %q, want %q", got, want)
+	}
 	if got := EriiDir; got != eriiDir {
 		t.Fatalf("EriiDir = %q, want %q", got, eriiDir)
 	}

@@ -17,20 +17,20 @@ import (
 
 // BrowserKeyMap defines keybindings for the config browser.
 type BrowserKeyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	Enter    key.Binding
-	Back     key.Binding
-	New      key.Binding
-	Rename   key.Binding
-	Delete   key.Binding
-	EditDesc     key.Binding
-	Help         key.Binding
-	Quit         key.Binding
-	FormCancel   key.Binding
-	FormNext     key.Binding
-	FormPrev     key.Binding
-	FormSubmit   key.Binding
+	Up         key.Binding
+	Down       key.Binding
+	Enter      key.Binding
+	Back       key.Binding
+	New        key.Binding
+	Rename     key.Binding
+	Delete     key.Binding
+	EditDesc   key.Binding
+	Help       key.Binding
+	Quit       key.Binding
+	FormCancel key.Binding
+	FormNext   key.Binding
+	FormPrev   key.Binding
+	FormSubmit key.Binding
 }
 
 func (k BrowserKeyMap) ShortHelp() []key.Binding {
@@ -181,36 +181,36 @@ func (i NodeItem) FilterValue() string { return i.Node.Title() }
 
 // BrowserModel is a generic config file browser using list + node tree.
 type BrowserModel struct {
-	Root            tree.ConfigNode
-	current         *tree.BranchNode
-	stack           []*tree.BranchNode
-	List            list.Model
-	width           int
-	height          int
-	Keys            BrowserKeyMap
-	help            help.Model
-	onEdit          func(leaf *tree.LeafNode, onSave func() tea.Cmd)
-	OnSaveFile      func(root tree.ConfigNode) error
-	title           string
-	pluginName      string
-	errMsg          string
-	adding          bool
-	addTitle        string
-	addDesc         string
-	addType         string
-	addForm         *huh.Form
-	renaming        bool
-	renameValue     string
-	renameDesc      string
-	renameForm      *huh.Form
-	deleting        bool
-	deleteConfirm   bool
-	deleteForm      *huh.Form
-	editingDesc     bool
-	editDescValue   string
-	editDescForm    *huh.Form
-	editable        bool
-	newItemFactory  func(title, desc string) tree.ConfigNode
+	Root           tree.ConfigNode
+	current        *tree.BranchNode
+	stack          []*tree.BranchNode
+	List           list.Model
+	width          int
+	height         int
+	Keys           BrowserKeyMap
+	help           help.Model
+	onEdit         func(leaf *tree.LeafNode, onSave func() tea.Cmd)
+	OnSaveFile     func(root tree.ConfigNode) error
+	title          string
+	pluginName     string
+	errMsg         string
+	adding         bool
+	addTitle       string
+	addDesc        string
+	addType        string
+	addForm        *huh.Form
+	renaming       bool
+	renameValue    string
+	renameDesc     string
+	renameForm     *huh.Form
+	deleting       bool
+	deleteConfirm  bool
+	deleteForm     *huh.Form
+	editingDesc    bool
+	editDescValue  string
+	editDescForm   *huh.Form
+	editable       bool
+	newItemFactory func(title, desc string) tree.ConfigNode
 }
 
 func NewBrowserModel(root tree.ConfigNode, title string, onEdit func(leaf *tree.LeafNode, onSave func() tea.Cmd), OnSaveFile func(root tree.ConfigNode) error) *BrowserModel {
@@ -265,6 +265,21 @@ func (m *BrowserModel) autoSave() {
 			m.errMsg = err.Error()
 		}
 	}
+}
+
+func (m *BrowserModel) saveDesc(nodePath, desc string) {
+	if err := tree.SaveDescForPlugin(m.pluginName, nodePath, desc); err != nil {
+		m.errMsg = err.Error()
+	} else {
+		m.errMsg = ""
+	}
+}
+
+func (m *BrowserModel) saveRenamedDesc(oldPath, newPath, desc string) {
+	if oldPath != newPath {
+		m.saveDesc(oldPath, "")
+	}
+	m.saveDesc(newPath, desc)
 }
 
 // WithEditable enables add/delete/rename without copy.json permission.
@@ -488,7 +503,7 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.refreshList()
 				m.List.Select(idx)
-				_ = tree.SaveDesc(m.childPath(child.Title()), newDesc)
+				m.saveDesc(m.childPath(child.Title()), newDesc)
 			}
 		}
 		return m, cmd
@@ -518,7 +533,7 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.refreshList()
 				m.List.Select(len(m.current.Children()) - 1)
-				_ = tree.SaveDesc(m.childPath(title), desc)
+				m.saveDesc(m.childPath(title), desc)
 				m.autoSave()
 			}
 		}
@@ -559,10 +574,7 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.refreshList()
 					m.List.Select(idx)
 					newPath := m.childPath(newName)
-					if oldPath != newPath {
-						_ = tree.SaveDesc(oldPath, "")
-					}
-					_ = tree.SaveDesc(newPath, newDesc)
+					m.saveRenamedDesc(oldPath, newPath, newDesc)
 				}
 				m.autoSave()
 			}

@@ -2,6 +2,7 @@ package tree
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -264,6 +265,13 @@ func toStringArray(v any) ([]string, bool) {
 // SaveDesc updates the description for a path and persists desc.json (flat format).
 // An empty description removes the override.
 func SaveDesc(nodePath, desc string) error {
+	return SaveDescForPlugin("", nodePath, desc)
+}
+
+// SaveDescForPlugin updates a description in the selected metadata namespace.
+// Main config descriptions are persisted to .conf/desc.json; plugin descriptions
+// are persisted to .conf/plugin-config/schema/<plugin>.json under __desc__.
+func SaveDescForPlugin(pluginName, nodePath, desc string) error {
 	if GlobalMetadata == nil {
 		GlobalMetadata = &Metadata{
 			MainDesc:          make(map[string]string),
@@ -278,6 +286,9 @@ func SaveDesc(nodePath, desc string) error {
 	}
 	if strings.HasPrefix(nodePath, "root.") {
 		nodePath = nodePath[5:]
+	}
+	if pluginName != "" {
+		return savePluginDesc(pluginName, nodePath, desc)
 	}
 	if GlobalMetadata.MainDesc == nil {
 		GlobalMetadata.MainDesc = make(map[string]string)
@@ -296,6 +307,66 @@ func SaveDesc(nodePath, desc string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(metaDir, "desc.json"), data, 0644)
+}
+
+func savePluginDesc(pluginName, nodePath, desc string) error {
+	if pluginName == "" || pluginName == "." || pluginName == ".." ||
+		filepath.Base(pluginName) != pluginName || strings.ContainsAny(pluginName, `/\`) {
+		return fmt.Errorf("invalid plugin name %q", pluginName)
+	}
+	if path.PluginSchemaDir == "" {
+		updatePluginDescMetadata(pluginName, nodePath, desc)
+		return nil
+	}
+	if err := os.MkdirAll(path.PluginSchemaDir, 0755); err != nil {
+		return fmt.Errorf("create plugin schema directory: %w", err)
+	}
+
+	schemaPath := filepath.Join(path.PluginSchemaDir, pluginName+".json")
+	raw := make(map[string]any)
+	if data, err := os.ReadFile(schemaPath); err == nil {
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return fmt.Errorf("parse plugin schema %s: %w", pluginName, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read plugin schema %s: %w", pluginName, err)
+	}
+
+	descSection, _ := raw["__desc__"].(map[string]any)
+	if descSection == nil {
+		descSection = make(map[string]any)
+	}
+	if strings.TrimSpace(desc) == "" {
+		delete(descSection, nodePath)
+	} else {
+		descSection[nodePath] = desc
+	}
+	raw["__desc__"] = descSection
+
+	data, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal plugin schema %s: %w", pluginName, err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(schemaPath, data, 0644); err != nil {
+		return fmt.Errorf("write plugin schema %s: %w", pluginName, err)
+	}
+	updatePluginDescMetadata(pluginName, nodePath, desc)
+	return nil
+}
+
+func updatePluginDescMetadata(pluginName, nodePath, desc string) {
+	if GlobalMetadata.PluginDesc == nil {
+		GlobalMetadata.PluginDesc = make(map[string]map[string]string)
+	}
+	if GlobalMetadata.PluginDesc[pluginName] == nil {
+		GlobalMetadata.PluginDesc[pluginName] = make(map[string]string)
+	}
+	if strings.TrimSpace(desc) == "" {
+		delete(GlobalMetadata.PluginDesc[pluginName], nodePath)
+	} else {
+		GlobalMetadata.PluginDesc[pluginName][nodePath] = desc
+	}
 }
 
 // GetEnum returns enum options for a dot-separated path in the selected context.

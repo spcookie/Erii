@@ -51,7 +51,7 @@ func InitPaths(confDir, confMetaDir, eriiDir, pluginDir, optsPath string) {
 	RulesDir = filepath.Join(ConfDir, "rules")
 	McpDir = filepath.Join(ConfDir, "mcp")
 	PluginConfigDir = filepath.Join(ConfDir, "plugin-config")
-	PluginSchemaDir = filepath.Join(PluginConfigDir, "schema")
+	PluginSchemaDir = filepath.Join(ConfMetaDir, "plugin-config", "schema")
 	if pluginDir != "" {
 		PluginDir = pluginDir
 	} else {
