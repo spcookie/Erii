@@ -1,8 +1,8 @@
 -XX:+UseG1GC
--Xms256m
--Xmx256m
--Xss1m
--XX:MaxDirectMemorySize=256m
+-Xms512m
+-Xmx512m
+-Xss512k
+-XX:MaxDirectMemorySize=128m
 -XX:MaxMetaspaceSize=128m
 -XX:CompressedClassSpaceSize=64m
 -XX:MaxGCPauseMillis=200
