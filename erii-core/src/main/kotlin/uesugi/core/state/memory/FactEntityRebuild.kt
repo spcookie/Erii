@@ -2,6 +2,14 @@ package uesugi.core.state.memory
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.apache.lucene.analysis.CharArraySet
+import org.apache.lucene.analysis.cn.smart.SmartChineseAnalyzer
+import org.apache.lucene.analysis.en.EnglishAnalyzer
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
+import java.io.StringReader
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.use
 
 data class FactEntityRebuildSummary(
     val scanned: Int,
@@ -80,22 +88,46 @@ class FactEntityRebuildRunner(
 }
 
 internal fun extractEntityCandidates(text: String): List<String> {
-    val words = Regex("""[\p{IsHan}A-Za-z0-9_/\-.]{2,}""")
-        .findAll(text)
-        .map { it.value.trim() }
-        .filterNot { it in entityStopWords }
-        .toList()
-    return words.distinct().take(16)
+    if (text.isBlank()) return emptyList()
+
+    return SmartChineseAnalyzer(entityAnalyzerStopWords).use { analyzer ->
+        analyzer.tokenStream("entities", StringReader(text)).use { tokenStream ->
+            val term = tokenStream.addAttribute(CharTermAttribute::class.java)
+            val candidates = linkedSetOf<String>()
+            tokenStream.reset()
+            while (tokenStream.incrementToken() && candidates.size < 16) {
+                term.toString().trim()
+                    .takeIf { it.length >= 2 }
+                    ?.let(candidates::add)
+            }
+            tokenStream.end()
+            candidates.toList()
+        }
+    }
 }
 
-private val entityStopWords = setOf(
-    "user",
-    "from",
-    "to",
-    "and",
-    "the",
-    "已经",
-    "开始",
-    "用户",
-    "事实"
-)
+private val entityAnalyzerStopWords: CharArraySet =
+    CharArraySet.copy(SmartChineseAnalyzer.getDefaultStopSet()).apply {
+        addAll(EnglishAnalyzer.getDefaultStopSet())
+    }
+
+internal fun removeOrphanStoreDirectories(
+    root: Path,
+    activeKeys: Set<String>,
+    closeStore: (String) -> Unit
+): List<String> {
+    if (!Files.isDirectory(root)) return emptyList()
+
+    val orphanPaths = Files.list(root).use { paths ->
+        paths.filter(Files::isDirectory)
+            .filter { it.fileName.toString() !in activeKeys }
+            .sorted()
+            .toList()
+    }
+    return orphanPaths.map { path ->
+        val key = path.fileName.toString()
+        closeStore(key)
+        check(path.toFile().deleteRecursively()) { "Failed to remove orphan store: $path" }
+        key
+    }
+}

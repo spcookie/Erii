@@ -19,6 +19,7 @@ import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
@@ -528,6 +529,19 @@ class MemoryGraphAndMigrationTest {
         assertEquals(FactEntityRebuildSummary(scanned = 1, updated = 1, unchanged = 0, failed = 0), report.summary)
         assertEquals(listOf("杭州", "重庆"), repository.getFactById(factId)!!.entities)
         assertEquals(listOf("杭州", "重庆"), report.items.single().after)
+    }
+
+    @Test
+    fun `entity candidates use lucene tokenization and stop words`() {
+        val candidates = extractEntityCandidates("the user moved from 杭州 to 重庆 and the user stayed in 杭州")
+
+        assertTrue("杭州" in candidates)
+        assertTrue("重庆" in candidates)
+        assertFalse("the" in candidates)
+        assertFalse("and" in candidates)
+        assertFalse("to" in candidates)
+        assertEquals(candidates.distinct(), candidates)
+        assertTrue(candidates.size <= 16)
     }
 
     @Test
