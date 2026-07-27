@@ -15,18 +15,26 @@ import uesugi.core.state.dispatch.*
 
 internal suspend fun runConfiguredMemoryRebuilds(
     options: MemoryRebuildOptions,
+    rebuildEntities: suspend () -> Unit = {},
     rebuildVector: suspend () -> Unit,
     rebuildGraph: suspend () -> Unit,
     logFailure: (String, Exception) -> Unit
 ) {
-    if (options.vector) {
+    if (options.entities) {
+        try {
+            rebuildEntities()
+        } catch (e: Exception) {
+            logFailure("entities", e)
+        }
+    }
+    if (options.vector || options.entities) {
         try {
             rebuildVector()
         } catch (e: Exception) {
             logFailure("vector", e)
         }
     }
-    if (options.graph) {
+    if (options.graph || options.entities) {
         try {
             rebuildGraph()
         } catch (e: Exception) {
@@ -73,12 +81,18 @@ class MemoryJob(
     }
 
     private fun runConfiguredRebuilds(options: MemoryRebuildOptions) {
-        if (!options.vector && !options.graph) return
+        if (!options.entities && !options.vector && !options.graph) return
         runBlocking {
             if (mutex.tryLock()) {
                 try {
                     runConfiguredMemoryRebuilds(
                         options = options,
+                        rebuildEntities = {
+                            log.info("Configured fact entity rebuild started")
+                            withContext(Dispatchers.IO) {
+                                memoryService.rebuildFactEntities()
+                            }
+                        },
                         rebuildVector = {
                             log.info("Configured fact vector rebuild started")
                             withContext(Dispatchers.IO) {

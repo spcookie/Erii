@@ -326,45 +326,64 @@ class MemoryService(
         val vectorId: String = result.vectorId
     }
 
-    suspend fun rebuildFactVectors(): MemoryRebuildResult {
-        val facts = withContext(Dispatchers.IO) {
-            memoryRepository.getAllValidFacts()
+    suspend fun rebuildFactEntities(): FactEntityRebuildReport {
+        val report = FactEntityRebuildRunner(memoryRepository) { fact ->
+            extractEntityCandidates(fact.description)
+        }.run()
+        log.info("Fact entities rebuilt: ${report.summary}")
+        report.items.filter { it.error != null }.forEach { item ->
+            log.warn("Fact entity rebuild failed, factId=${item.factId}, error=${item.error}")
         }
+        return report
+    }
+
+    suspend fun rebuildFactVectors(): MemoryRebuildResult {
         val groups = withContext(Dispatchers.IO) {
             memoryRepository.getAllFactGroups()
         }
 
+        var factCount = 0
         groups.forEach { (botMark, groupId) ->
+            val facts = withContext(Dispatchers.IO) {
+                memoryRepository.getValidFacts(botMark, groupId)
+            }
+            factCount += facts.size
             val indexed = factVectorStoreFactory.rebuildStore(
                 botMark = botMark,
                 groupId = groupId,
-                facts = facts.filter { it.botMark == botMark && it.groupId == groupId }
+                facts = facts
             )
-            indexed.forEach { (factId, vectorId) ->
-                withContext(Dispatchers.IO) {
-                    memoryRepository.updateFactVectorId(factId, vectorId)
-                }
+            withContext(Dispatchers.IO) {
+                memoryRepository.updateFactVectorIds(indexed)
             }
         }
+        val removedStores = factVectorStoreFactory.removeOrphanStores(groups)
+        if (removedStores.isNotEmpty()) {
+            log.info("Removed orphan fact vector stores: ${removedStores.joinToString()}")
+        }
 
-        log.info("Fact vector stores rebuilt, groups=${groups.size}, facts=${facts.size}")
+        log.info("Fact vector stores rebuilt, groups=${groups.size}, facts=$factCount")
         return MemoryRebuildResult(
-            facts = facts.size,
+            facts = factCount,
             groups = groups.map { (botMark, groupId) -> "$botMark:$groupId" }
         )
     }
 
     fun rebuildFactGraphs(): MemoryRebuildResult {
-        val facts = memoryRepository.getAllValidFacts()
         val groups = memoryRepository.getAllFactGroups()
 
         groups.forEach { (botMark, groupId) ->
             factGraphStoreFactory.rebuildStore(botMark, groupId)
         }
+        val removedStores = factGraphStoreFactory.removeOrphanStores(groups)
+        if (removedStores.isNotEmpty()) {
+            log.info("Removed orphan fact graph stores: ${removedStores.joinToString()}")
+        }
+        val factCount = memoryRepository.countAllValidFacts()
 
-        log.info("Fact graph stores rebuilt, groups=${groups.size}, facts=${facts.size}")
+        log.info("Fact graph stores rebuilt, groups=${groups.size}, facts=$factCount")
         return MemoryRebuildResult(
-            facts = facts.size,
+            facts = factCount,
             groups = groups.map { (botMark, groupId) -> "$botMark:$groupId" }
         )
     }

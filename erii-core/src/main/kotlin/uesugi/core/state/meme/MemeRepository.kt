@@ -276,6 +276,23 @@ class MemeRepository {
         }
     }
 
+    fun getAnalyzedMemesForRebuild(botId: String, groupId: String): List<MemeRecord> = transaction {
+        MemeEntity.find {
+            (MemeTable.botMark eq botId) and
+                    (MemeTable.groupId eq groupId) and
+                    (MemeTable.lastAnalyzedCount greater 0)
+        }
+            .map { it.toRecord() }
+    }
+
+    fun getAllMemeGroups(): List<Pair<String, String>> = transaction {
+        MemeTable
+            .select(MemeTable.botMark, MemeTable.groupId)
+            .withDistinct(true)
+            .map { it[MemeTable.botMark] to it[MemeTable.groupId] }
+            .sortedWith(compareBy<Pair<String, String>> { it.first }.thenBy { it.second })
+    }
+
     @OptIn(ExperimentalTime::class)
     fun updateMeme(id: Int, description: String?, purpose: String?, tags: String?): MemeRecord? {
         return transaction {

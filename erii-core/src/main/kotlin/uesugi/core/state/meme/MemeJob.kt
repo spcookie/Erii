@@ -53,7 +53,22 @@ class MemeJob(
      *
      * 启动每天凌晨 3 点执行的清理任务。
      */
-    fun openTimingTriggerSignal() {
+    fun openTimingTriggerSignal(rebuildOptions: MemeRebuildOptions = MemeRebuildOptions.from()) {
+        if (rebuildOptions.vector) {
+            runBlocking {
+                if (mutex.tryLock()) {
+                    try {
+                        log.info("Configured meme vector rebuild started")
+                        memeService.rebuildVectorStores()
+                    } catch (e: Exception) {
+                        log.error("Configured meme vector rebuild failed", e)
+                    } finally {
+                        mutex.unlock()
+                    }
+                }
+            }
+        }
+
         // 清理任务：每天凌晨 3 点一次
         BackgroundJob.scheduleRecurrently(
             "meme-cleanup-job",

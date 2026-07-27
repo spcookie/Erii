@@ -15,6 +15,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uesugi.config.migration
 import uesugi.config.migrationIf
+import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,6 +23,28 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class MemoryGraphAndMigrationTest {
+    @Test
+    fun `orphan store cleanup keeps active directories and removes inactive directories`() {
+        val root = Files.createTempDirectory("erii-store-cleanup-test")
+        try {
+            Files.createDirectories(root.resolve("active"))
+            Files.createDirectories(root.resolve("orphan"))
+            Files.writeString(root.resolve("orphan").resolve("data"), "stale")
+            Files.writeString(root.resolve("not-a-store"), "keep")
+            val closed = mutableListOf<String>()
+
+            val removed = removeOrphanStoreDirectories(root, setOf("active"), closed::add)
+
+            assertEquals(listOf("orphan"), removed)
+            assertEquals(listOf("orphan"), closed)
+            assertTrue(Files.isDirectory(root.resolve("active")))
+            assertTrue(Files.exists(root.resolve("not-a-store")))
+            assertTrue(Files.notExists(root.resolve("orphan")))
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `migration adds entities column with empty list default`() {
         val database = createLegacyFactsDatabase()
@@ -349,6 +372,10 @@ class MemoryGraphAndMigrationTest {
             ),
             vectorStore.rebuilt
         )
+        assertEquals(
+            listOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"),
+            vectorStore.activeGroups.map { (botMark, groupId) -> "$botMark:$groupId" }
+        )
         assertEquals("fact_bot-a_group-b_$second", repository.getFactById(second)!!.vectorId)
     }
 
@@ -389,6 +416,10 @@ class MemoryGraphAndMigrationTest {
         assertEquals(2, result.facts)
         assertEquals(setOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"), result.groups.toSet())
         assertEquals(listOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"), graphStore.rebuilt)
+        assertEquals(
+            listOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"),
+            graphStore.activeGroups.map { (botMark, groupId) -> "$botMark:$groupId" }
+        )
     }
 
     @Test
@@ -396,26 +427,31 @@ class MemoryGraphAndMigrationTest {
         val defaults = MemoryRebuildOptions.from(emptyMap()) { null }
         val envOnly = MemoryRebuildOptions.from(
             mapOf(
+                "MEMORY_REBUILD_ENTITIES" to "yes",
                 "MEMORY_REBUILD_VECTOR" to "true",
                 "MEMORY_REBUILD_GRAPH" to "1"
             )
         ) { null }
         val propertyOverridesEnv = MemoryRebuildOptions.from(
             mapOf(
+                "MEMORY_REBUILD_ENTITIES" to "true",
                 "MEMORY_REBUILD_VECTOR" to "true",
                 "MEMORY_REBUILD_GRAPH" to "true"
             )
         ) { key ->
             when (key) {
+                "memory.rebuild.entities" -> "off"
                 "memory.rebuild.vector" -> "false"
                 "memory.rebuild.graph" -> "0"
                 else -> null
             }
         }
+        val rebuildAll = MemoryRebuildOptions.from(mapOf("MEMORY_REBUILD" to "on")) { null }
 
         assertEquals(MemoryRebuildOptions(), defaults)
-        assertEquals(MemoryRebuildOptions(vector = true, graph = true), envOnly)
-        assertEquals(MemoryRebuildOptions(vector = false, graph = false), propertyOverridesEnv)
+        assertEquals(MemoryRebuildOptions(entities = true, vector = true, graph = true), envOnly)
+        assertEquals(MemoryRebuildOptions(entities = false, vector = false, graph = false), propertyOverridesEnv)
+        assertEquals(MemoryRebuildOptions(entities = true, vector = true, graph = true), rebuildAll)
     }
 
     @Test
@@ -442,7 +478,22 @@ class MemoryGraphAndMigrationTest {
     }
 
     @Test
-    fun `fact entity rebuild dry run only analyzes empty valid facts without updating`() = runBlocking {
+    fun `entity rebuild also refreshes dependent vector and graph stores`() = runBlocking {
+        val events = mutableListOf<String>()
+
+        runConfiguredMemoryRebuilds(
+            options = MemoryRebuildOptions(entities = true),
+            rebuildEntities = { events += "entities" },
+            rebuildVector = { events += "vector" },
+            rebuildGraph = { events += "graph" },
+            logFailure = { _, error -> throw error }
+        )
+
+        assertEquals(listOf("entities", "vector", "graph"), events)
+    }
+
+    @Test
+    fun `fact entity rebuild only analyzes empty valid facts`() = runBlocking {
         createFactsDatabase()
         val repository = MemoryRepository()
         val emptyValid = repository.createFact("bot-a", "group-a", "move", "user moved from 杭州 to 重庆", emptyList(), "user-a", Scopes.USER)
@@ -456,10 +507,10 @@ class MemoryGraphAndMigrationTest {
             }
         }
 
-        val report = runner.run(FactEntityRebuildOptions(dryRun = true))
+        val report = runner.run()
 
-        assertEquals(FactEntityRebuildSummary(scanned = 1, updated = 0, unchanged = 1, failed = 0), report.summary)
-        assertEquals(emptyList(), repository.getFactById(emptyValid)!!.entities)
+        assertEquals(FactEntityRebuildSummary(scanned = 1, updated = 1, unchanged = 0, failed = 0), report.summary)
+        assertEquals(listOf("杭州", "重庆"), repository.getFactById(emptyValid)!!.entities)
         assertEquals(listOf("杭州", "重庆"), report.items.single().after)
     }
 
@@ -472,30 +523,11 @@ class MemoryGraphAndMigrationTest {
             listOf(" 杭州 ", "重庆", "杭州", "")
         }
 
-        val report = runner.run(FactEntityRebuildOptions())
+        val report = runner.run()
 
         assertEquals(FactEntityRebuildSummary(scanned = 1, updated = 1, unchanged = 0, failed = 0), report.summary)
         assertEquals(listOf("杭州", "重庆"), repository.getFactById(factId)!!.entities)
         assertEquals(listOf("杭州", "重庆"), report.items.single().after)
-    }
-
-    @Test
-    fun `fact entity rebuild option parser supports filters`() {
-        val options = parseFactEntityRebuildOptions(
-            arrayOf("--dry-run", "--all", "--include-invalid", "--bot", "bot-a", "--group", "group-a", "--limit", "5")
-        )
-
-        assertEquals(
-            FactEntityRebuildOptions(
-                dryRun = true,
-                onlyEmpty = false,
-                includeInvalid = true,
-                botMark = "bot-a",
-                groupId = "group-a",
-                limit = 5
-            ),
-            options
-        )
     }
 
     @Test
@@ -615,6 +647,7 @@ class MemoryGraphAndMigrationTest {
         val indexed = mutableListOf<Int>()
         val deleted = mutableListOf<String>()
         val rebuilt = linkedMapOf<String, List<Int>>()
+        var activeGroups: List<Pair<String, String>> = emptyList()
         val searchTopKs = mutableListOf<Int>()
         val keywordTopKs = mutableListOf<Int>()
 
@@ -650,6 +683,11 @@ class MemoryGraphAndMigrationTest {
             return facts.map { it.id to generateVectorId(it.botMark, it.groupId, it.id) }
         }
 
+        override fun removeOrphanStores(activeGroups: List<Pair<String, String>>): List<String> {
+            this.activeGroups = activeGroups
+            return emptyList()
+        }
+
         override suspend fun indexFact(fact: FactsRecord): String {
             if (failIndex) {
                 error("expected vector indexing failure")
@@ -670,9 +708,15 @@ class MemoryGraphAndMigrationTest {
         val added = mutableListOf<Int>()
         val removed = mutableListOf<Int>()
         val rebuilt = mutableListOf<String>()
+        var activeGroups: List<Pair<String, String>> = emptyList()
 
         override fun rebuildStore(botMark: String, groupId: String) {
             rebuilt.add("$botMark:$groupId")
+        }
+
+        override fun removeOrphanStores(activeGroups: List<Pair<String, String>>): List<String> {
+            this.activeGroups = activeGroups
+            return emptyList()
         }
 
         override fun addFactEntities(fact: FactsRecord) {

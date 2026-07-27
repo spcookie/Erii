@@ -3,8 +3,32 @@ package uesugi.core.component.storage
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class VectorStoreTest {
+    @Test
+    fun `invalid rebuild leaves committed index unchanged`() {
+        val path = Files.createTempDirectory("erii-vector-store-rebuild-test")
+        val store = EmbeddedVectorStore(path, 4)
+        try {
+            store.upsert("existing", "existing content", "GROUP", floatArrayOf(1f, 0f, 0f, 0f))
+            store.flush()
+
+            assertFailsWith<IllegalArgumentException> {
+                store.rebuild(
+                    listOf(
+                        VectorStoreItem("invalid", "invalid", "GROUP", floatArrayOf(1f, 0f))
+                    )
+                )
+            }
+
+            assertEquals("existing", store.search(floatArrayOf(1f, 0f, 0f, 0f), 10).single().id)
+        } finally {
+            store.close()
+            path.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `text search uses search text while returning stored content`() {
         val path = Files.createTempDirectory("erii-vector-store-test")

@@ -32,6 +32,14 @@ open class FactGraphStoreFactory {
         getStore(botMark, groupId).rebuild()
     }
 
+    open fun removeOrphanStores(activeGroups: List<Pair<String, String>>): List<String> {
+        val root = StorePathConfig.resolve("graph", "fact")
+        val activeKeys = activeGroups.mapTo(hashSetOf()) { (botMark, groupId) -> "${botMark}_$groupId" }
+        return removeOrphanStoreDirectories(root, activeKeys) { key ->
+            stores.remove(key)?.close()
+        }
+    }
+
     open fun expandByEntities(entityIds: List<String>, botMark: String, groupId: String): List<Int> {
         return getStore(botMark, groupId).expandByEntities(entityIds)
     }

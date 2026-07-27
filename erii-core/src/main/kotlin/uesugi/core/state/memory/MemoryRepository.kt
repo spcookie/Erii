@@ -204,6 +204,13 @@ class MemoryRepository {
         }.map { it.toRecord() }
     }
 
+    fun countAllValidFacts(): Int = transaction {
+        FactsEntity.count(
+            (FactsTable.validFrom lessEq CurrentDateTime) and
+                    (FactsTable.validTo.isNull() or (FactsTable.validTo greater CurrentDateTime))
+        ).toInt()
+    }
+
     fun getAllFactGroups(): List<Pair<String, String>> = transaction {
         FactsTable
             .select(FactsTable.botMark, FactsTable.groupId)
@@ -382,6 +389,15 @@ class MemoryRepository {
     /** 更新向量 ID */
     fun updateFactVectorId(id: Int, vectorId: String) = transaction {
         FactsTable.update({ FactsTable.id eq id }) { it[FactsTable.vectorId] = vectorId }
+    }
+
+    fun updateFactVectorIds(values: List<Pair<Int, String>>) {
+        if (values.isEmpty()) return
+        transaction {
+            values.forEach { (id, vectorId) ->
+                FactsTable.update({ FactsTable.id eq id }) { it[FactsTable.vectorId] = vectorId }
+            }
+        }
     }
 
     /** 标记事实记忆最近一次被召回的时间。 */

@@ -38,6 +38,7 @@ internal fun buildFactKeywordSearchText(fact: FactsRecord): String {
 open class FactVectorStoreFactory {
     companion object {
         private const val DIMENSION = 1024
+        private const val REBUILD_EMBEDDING_BATCH_SIZE = 64
     }
 
     private val stores = mutableMapOf<String, VectorStore>()
@@ -122,7 +123,9 @@ open class FactVectorStoreFactory {
         val orderedFacts = facts.sortedBy { it.id }
         val contents = orderedFacts.map { it.description }
         val vectors = withContext(Dispatchers.IO) {
-            EmbeddingManager.get().embedding(contents)
+            contents.chunked(REBUILD_EMBEDDING_BATCH_SIZE).flatMap { batch ->
+                EmbeddingManager.get().embedding(batch)
+            }
         }
         val items = pairFactsWithVectorsForRebuild(orderedFacts, vectors).map { (fact, vector) ->
             VectorStoreItem(
@@ -136,6 +139,14 @@ open class FactVectorStoreFactory {
 
         getStore(botMark, groupId).rebuild(items)
         return orderedFacts.zip(items).map { (fact, item) -> fact.id to item.id }
+    }
+
+    open fun removeOrphanStores(activeGroups: List<Pair<String, String>>): List<String> {
+        val root = StorePathConfig.resolve("vector", "fact")
+        val activeKeys = activeGroups.mapTo(hashSetOf()) { (botMark, groupId) -> "${botMark}_$groupId" }
+        return removeOrphanStoreDirectories(root, activeKeys) { key ->
+            stores.remove(key)?.close()
+        }
     }
 
     /**

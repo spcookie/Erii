@@ -1,5 +1,7 @@
 package uesugi.core.state.meme
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.LocalDateTime
 import uesugi.common.toolkit.logger
 import uesugi.core.state.meme.MemeData.MemeRecord
@@ -23,6 +25,8 @@ class MemeService(
     private val vectorStoreFactory: MemoVectorStore,
     private val repository: MemeRepository
 ) {
+
+    private val vectorMutationMutex = Mutex()
 
     companion object {
         private val log = logger()
@@ -143,20 +147,9 @@ class MemeService(
      *
      * @param memo 表情包记录
      */
-    suspend fun upsertToVectorStore(memo: MemeRecord) {
+    suspend fun upsertToVectorStore(memo: MemeRecord) = vectorMutationMutex.withLock {
         val store = vectorStoreFactory.getStore(memo.botId, memo.groupId)
-
-        // 构建用于向量化的文本内容
-        val content = buildString {
-            memo.purpose?.let {
-                if (isNotEmpty()) append(" ")
-                append(it)
-            }
-            memo.tags?.let {
-                if (isNotEmpty()) append(" ")
-                append(it)
-            }
-        }
+        val content = buildMemeVectorContent(memo)
 
         if (content.isNotBlank()) {
             val vector = vectorStoreFactory.encode(content, memo.resource?.bytes)
@@ -167,6 +160,30 @@ class MemeService(
             store.upsert(vectorId, content, "", vector)
             log.debug("表情包向量已存储: vectorId=$vectorId, content=$content")
         }
+    }
+
+    suspend fun rebuildVectorStores(): MemeVectorRebuildResult = vectorMutationMutex.withLock {
+        val groups = repository.getAllMemeGroups()
+
+        var indexedCount = 0
+        groups.forEach { (candidateBotId, candidateGroupId) ->
+            val analyzedMemos = repository.getAnalyzedMemesForRebuild(candidateBotId, candidateGroupId)
+            val indexed = vectorStoreFactory.rebuildStore(
+                botMark = candidateBotId,
+                groupId = candidateGroupId,
+                memos = analyzedMemos
+            )
+            indexed.forEach { (memeId, vectorId) ->
+                repository.updateVectorId(memeId, vectorId)
+            }
+            indexedCount += indexed.size
+        }
+
+        val rebuiltGroups = groups.map { (candidateBotId, candidateGroupId) ->
+            "$candidateBotId:$candidateGroupId"
+        }
+        log.info("Meme vector stores rebuilt, groups=${rebuiltGroups.size}, memes=$indexedCount")
+        MemeVectorRebuildResult(indexedCount, rebuiltGroups)
     }
 
     /**

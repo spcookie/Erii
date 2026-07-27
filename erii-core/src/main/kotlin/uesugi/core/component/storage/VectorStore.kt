@@ -59,6 +59,7 @@ interface VectorStore {
     fun rebuild(items: List<VectorStoreItem>)
     fun search(queryVector: FloatArray, topK: Int, filter: List<String>? = null): List<VectorSearchResult>
     fun searchText(query: String, topK: Int): List<VectorSearchResult>
+    fun close() = Unit
 }
 
 class EmbeddedVectorStore(
@@ -68,8 +69,8 @@ class EmbeddedVectorStore(
 
     private val directory = FSDirectory.open(path)
 
-    private val writer: IndexWriter
-    private val searcherManager: SearcherManager
+    private lateinit var writer: IndexWriter
+    private lateinit var searcherManager: SearcherManager
 
     private val lock = ReentrantReadWriteLock()
 
@@ -87,6 +88,10 @@ class EmbeddedVectorStore(
     }
 
     init {
+        openIndex()
+    }
+
+    private fun openIndex() {
         val config = IndexWriterConfig(SmartChineseAnalyzer()).apply {
             openMode = IndexWriterConfig.OpenMode.CREATE_OR_APPEND
         }
@@ -124,15 +129,29 @@ class EmbeddedVectorStore(
 
     override fun rebuild(items: List<VectorStoreItem>) {
         items.forEach { validate(it.vector) }
+        val documents = items.map { item ->
+            document(item.id, item.content, item.tag, item.vector, item.searchText)
+        }
 
         lock.write {
-            writer.deleteAll()
-            items.forEach { item ->
-                writer.addDocument(document(item.id, item.content, item.tag, item.vector, item.searchText))
-            }
+            // 先固化普通 upsert，再以该提交作为失败回滚点。
             writer.commit()
-            uncommittedCount = 0
-            searcherManager.maybeRefresh()
+            try {
+                writer.deleteAll()
+                writer.addDocuments(documents)
+                writer.commit()
+                uncommittedCount = 0
+                searcherManager.maybeRefresh()
+            } catch (error: Exception) {
+                runCatching { searcherManager.close() }
+                    .onFailure(error::addSuppressed)
+                runCatching { writer.rollback() }
+                    .onFailure(error::addSuppressed)
+                uncommittedCount = 0
+                runCatching { openIndex() }
+                    .onFailure(error::addSuppressed)
+                throw error
+            }
         }
     }
 
