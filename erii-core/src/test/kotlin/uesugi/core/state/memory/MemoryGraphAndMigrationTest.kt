@@ -9,10 +9,14 @@ import ai.koog.prompt.message.Message
 import ai.koog.prompt.streaming.StreamFrame
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import uesugi.config.migration
 import uesugi.config.migrationIf
 import uesugi.core.manage.ManageListQuery
@@ -23,8 +27,89 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.ExperimentalTime
 
 class MemoryGraphAndMigrationTest {
+    @Test
+    fun `conflict candidates are limited to the same subject scope and keyword`() {
+        createFactsDatabase()
+        val repository = MemoryRepository()
+        val matching = repository.createFact(
+            "bot-a", "group-a", "居住地", "用户现在住在杭州", listOf("杭州"), "user-a", Scopes.USER
+        )
+        repository.createFact(
+            "bot-a", "group-a", "居住地", "另一个用户住在上海", listOf("上海"), "user-b", Scopes.USER
+        )
+        repository.createFact(
+            "bot-a", "group-a", "工作", "用户在某公司工作", emptyList(), "user-a", Scopes.USER
+        )
+        repository.createFact(
+            "bot-a", "group-a", "居住地", "群体所在地", emptyList(), "", Scopes.GROUP
+        )
+        val existing = repository.getValidFacts("bot-a", "group-a")
+
+        val candidates = selectConflictCandidates(
+            listOf(
+                ExtractedFact(
+                    keyword = "居住地",
+                    description = "用户已经搬到重庆",
+                    entities = listOf("重庆"),
+                    subjects = "user-a",
+                    scope = Scopes.USER
+                )
+            ),
+            existing
+        )
+
+        assertEquals(listOf(matching), candidates.map { it.id })
+        assertFalse(isDeleteBackedBySuccessfulAdd(candidates.single(), emptyList()))
+        assertTrue(
+            isDeleteBackedBySuccessfulAdd(
+                candidates.single(),
+                listOf(
+                    ExtractedFact(
+                        keyword = "居住地",
+                        description = "用户已经搬到重庆",
+                        entities = listOf("重庆"),
+                        subjects = "user-a",
+                        scope = Scopes.USER
+                    )
+                )
+            )
+        )
+    }
+
+    @OptIn(ExperimentalTime::class)
+    @Test
+    fun `expired fact cleanup keeps recently deprecated facts for retention window`() {
+        createFactsDatabase()
+        val repository = MemoryRepository()
+        val oldId = repository.createFact(
+            "bot-a", "group-a", "old", "old fact", emptyList(), "user-a", Scopes.USER
+        )
+        val recentId = repository.createFact(
+            "bot-a", "group-a", "recent", "recent fact", emptyList(), "user-a", Scopes.USER
+        )
+        val now = Clock.System.now()
+        val timeZone = TimeZone.currentSystemDefault()
+        transaction {
+            FactsTable.update({ FactsTable.id eq oldId }) {
+                it[FactsTable.validTo] = (now - 31.days).toLocalDateTime(timeZone)
+            }
+            FactsTable.update({ FactsTable.id eq recentId }) {
+                it[FactsTable.validTo] = (now - 1.days).toLocalDateTime(timeZone)
+            }
+        }
+
+        val deleted = repository.deleteExpiredFacts((now - 30.days).toLocalDateTime(timeZone))
+
+        assertEquals(listOf(oldId), deleted.map { it.id })
+        assertEquals(null, repository.getFactById(oldId))
+        assertTrue(repository.getFactById(recentId) != null)
+    }
+
     @Test
     fun `status fact size counts only valid facts while management lists all facts`() {
         createFactsDatabase()

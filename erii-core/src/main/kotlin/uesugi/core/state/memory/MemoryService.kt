@@ -6,30 +6,19 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.Op
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.case
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.intLiteral
-import org.jetbrains.exposed.v1.core.like
-import org.jetbrains.exposed.v1.core.lowerCase
-import org.jetbrains.exposed.v1.core.not
-import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uesugi.common.data.HistoryRecord
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.common.toolkit.logger
-import uesugi.core.message.history.truncateContent
 import uesugi.core.manage.ManageListQuery
+import uesugi.core.message.history.truncateContent
 import uesugi.core.state.dispatch.StateWorkResult
 import uesugi.core.state.summary.SummaryEntity
 import uesugi.core.state.summary.SummaryTable
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
-import kotlin.time.ExperimentalTime
 
 /**
  * 记忆服务 - 负责记忆处理的业务逻辑
@@ -43,6 +32,7 @@ class MemoryService(
 
     companion object {
         private val log = logger()
+        private const val EXPIRED_FACT_RETENTION_DAYS = 30L
     }
 
     /**
@@ -568,14 +558,19 @@ class MemoryService(
     }
 
     fun deleteExpiredFacts(): Int {
-        val deletedFacts = memoryRepository.deleteExpiredFacts()
+        val cutoff = Clock.System.now()
+            .minus(EXPIRED_FACT_RETENTION_DAYS.days)
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+        val deletedFacts = memoryRepository.deleteExpiredFacts(cutoff)
         deleteVectors(deletedFacts)
         deleteGraphs(deletedFacts)
-        log.info("Expired fact memory cleanup completed, deleted=${deletedFacts.size}")
+        log.info(
+            "Expired fact memory cleanup completed, retentionDays=$EXPIRED_FACT_RETENTION_DAYS, " +
+                    "deleted=${deletedFacts.size}"
+        )
         return deletedFacts.size
     }
 
-    @OptIn(ExperimentalTime::class)
     fun deleteStaleUnrecalledFacts(staleRecallDays: Long): Int {
         val cutoff = Clock.System.now()
             .minus(staleRecallDays.days)
