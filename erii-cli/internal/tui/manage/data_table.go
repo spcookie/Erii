@@ -134,7 +134,7 @@ func NewDataTableModel(api *api.Client, rt ResourceType, bot api.BotInfo, group 
 		loading:      true,
 		width:        80,
 		height:       24,
-		pageSize:     20,
+		pageSize:     0,
 		currentPage:  0,
 		sortCol:      -1,
 		sortAsc:      true,
@@ -164,6 +164,11 @@ func newConfirmForm(title, description string, value *bool, width int) *huh.Form
 }
 
 func (m *DataTableModel) Init() tea.Cmd {
+	// Wait for WindowSizeMsg so the first server page uses the number of rows
+	// that can actually be displayed instead of an arbitrary default limit.
+	if m.pageSize <= 0 {
+		return nil
+	}
 	return m.loadPage()
 }
 
@@ -280,7 +285,9 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.help.Width = msg.Width
-		m.updateTableSize()
+		if m.updateTableSize() {
+			return m, m.loadPage()
+		}
 		return m, nil
 
 	case dataLoadedMsg:
@@ -358,7 +365,9 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if key.Matches(msg, m.keys.Help) {
 			m.help.ShowAll = !m.help.ShowAll
-			m.updateTableSize()
+			if m.updateTableSize() {
+				return m, m.loadPage()
+			}
 			return m, nil
 		}
 		if key.Matches(msg, m.keys.Back) {
@@ -367,7 +376,9 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, m.keys.Search) {
 			m.searching = true
 			m.searchInput.Focus()
-			m.updateTableSize()
+			if m.updateTableSize() {
+				return m, tea.Batch(textinput.Blink, m.loadPage())
+			}
 			return m, textinput.Blink
 		}
 		if key.Matches(msg, m.keys.Refresh) {
@@ -503,18 +514,30 @@ func (m *DataTableModel) updateTableRows() {
 	m.table.SetRows(rows)
 }
 
-func (m *DataTableModel) updateTableSize() {
+func (m *DataTableModel) updateTableSize() bool {
+	oldPageSize := m.pageSize
+	oldOffset := 0
+	if oldPageSize > 0 {
+		oldOffset = m.currentPage * oldPageSize
+	}
+
 	widths := m.formatter.calcWidths(m.width)
 	cols := m.formatter.columns(widths)
 	m.table.SetColumns(cols)
 
-	fixed := 2 // title + status (header is inside table height)
-	if m.searching {
-		fixed++
+	chrome := []string{
+		m.renderTitleBar(),
+		m.renderStatusBar(),
+		m.help.View(m.keys),
 	}
-	helpLines := strings.Count(m.help.View(m.keys), "\n") + 1
-	fixed += helpLines
-	fixed += 2 // lipgloss border around table (top + bottom)
+	if m.searching {
+		chrome = append(chrome, SearchBarStyle.Width(m.width).Render(m.searchInput.View()))
+	}
+
+	fixed := 2 // top and bottom border around the table
+	for _, section := range chrome {
+		fixed += lipgloss.Height(section)
+	}
 
 	h := m.height - fixed
 	if h < 3 {
@@ -523,6 +546,14 @@ func (m *DataTableModel) updateTableSize() {
 	m.table.SetHeight(h)
 	m.table.SetWidth(m.width - 2)
 
+	// table.Height is the viewport height after the table header has been
+	// deducted, so it is exactly the number of data rows visible on screen.
+	m.pageSize = max(1, m.table.Height())
+	if m.pageSize == oldPageSize {
+		return false
+	}
+	m.currentPage = oldOffset / m.pageSize
+	return true
 }
 
 func (m *DataTableModel) cursorItemIndex() int {
@@ -545,7 +576,7 @@ func (m *DataTableModel) getKeyAtCursor() string {
 }
 
 func (m *DataTableModel) pageCount() int {
-	if m.totalCount == 0 {
+	if m.totalCount == 0 || m.pageSize <= 0 {
 		return 1
 	}
 	return (m.totalCount-1)/m.pageSize + 1

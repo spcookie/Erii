@@ -110,8 +110,9 @@ func (m *RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		if top := m.Current(); top != nil {
-			newTop, _ := top.Update(msg)
+			newTop, cmd := top.Update(msg)
 			m.stack[len(m.stack)-1] = newTop
+			return m, cmd
 		}
 		return m, nil
 
