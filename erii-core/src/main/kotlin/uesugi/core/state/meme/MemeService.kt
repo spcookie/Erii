@@ -4,6 +4,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.LocalDateTime
 import uesugi.common.toolkit.logger
+import uesugi.core.manage.ManageListQuery
 import uesugi.core.state.meme.MemeData.MemeRecord
 import uesugi.core.state.meme.MemeData.MemeScanStateRecord
 
@@ -140,6 +141,10 @@ class MemeService(
      */
     fun getAllMemos(botId: String, groupId: String, offset: Int = 0, limit: Int = 0): Pair<List<MemeRecord>, Int> {
         return repository.getAllMemos(botId, groupId, offset, limit)
+    }
+
+    fun getAllMemos(botId: String, groupId: String, listQuery: ManageListQuery): Pair<List<MemeRecord>, Int> {
+        return repository.getAllMemos(botId, groupId, listQuery)
     }
 
     /**

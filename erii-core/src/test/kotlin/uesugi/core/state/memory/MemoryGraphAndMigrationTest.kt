@@ -15,6 +15,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uesugi.config.migration
 import uesugi.config.migrationIf
+import uesugi.core.manage.ManageListQuery
 import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.Test
@@ -24,6 +25,91 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class MemoryGraphAndMigrationTest {
+    @Test
+    fun `status fact size counts only valid facts while management lists all facts`() {
+        createFactsDatabase()
+        val repository = MemoryRepository()
+        val activeId = repository.createFact(
+            "bot-a", "group-a", "active", "active fact", listOf("杭州"), "user-a", Scopes.USER
+        )
+        val invalidId = repository.createFact(
+            "bot-a", "group-a", "invalid", "invalid fact", listOf("上海"), "user-a", Scopes.USER
+        )
+        repository.deprecateFactsById("bot-a", "group-a", invalidId, Scopes.USER)
+        repository.createFact(
+            "bot-a", "group-b", "other", "other group fact", emptyList(), "user-a", Scopes.USER
+        )
+        val vectorStore = RecordingVectorStoreFactory()
+        val graphStore = RecordingGraphStoreFactory()
+        val service = MemoryService(
+            memoryAgent = MemoryAgent(repository, vectorStore, graphStore, FailingPromptExecutor()),
+            memoryRepository = repository,
+            factVectorStoreFactory = vectorStore,
+            factGraphStoreFactory = graphStore
+        )
+
+        assertEquals(1L, service.getFactSize("bot-a", "group-a"))
+        assertEquals(listOf(activeId), service.getAllFactsByGroup("bot-a", "group-a").first.map { it.id.value })
+
+        val (allFacts, total) = service.getAllFactsByGroupForManagement("bot-a", "group-a")
+        assertEquals(2, total)
+        assertEquals(setOf(activeId, invalidId), allFacts.map { it.id.value }.toSet())
+        assertEquals(
+            mapOf(activeId to true, invalidId to false),
+            allFacts.associate { it.id.value to it.toRecord().valid }
+        )
+
+        val (invalidFacts, invalidTotal) = service.getAllFactsByGroupForManagement(
+            "bot-a",
+            "group-a",
+            ManageListQuery(search = "invalid")
+        )
+        assertEquals(1, invalidTotal)
+        assertEquals(listOf(invalidId), invalidFacts.map { it.id.value })
+
+        val (matchingFacts, matchingTotal) = service.getAllFactsByGroupForManagement(
+            "bot-a",
+            "group-a",
+            ManageListQuery(search = "active fact")
+        )
+        assertEquals(1, matchingTotal)
+        assertEquals(listOf(activeId), matchingFacts.map { it.id.value })
+
+        val (sortedByValidity, _) = service.getAllFactsByGroupForManagement(
+            "bot-a",
+            "group-a",
+            ManageListQuery(sortBy = "valid", ascending = true)
+        )
+        assertEquals(listOf(invalidId, activeId), sortedByValidity.map { it.id.value })
+    }
+
+    @Test
+    fun `management fact paging is applied after newest-first ordering`() {
+        createFactsDatabase()
+        val repository = MemoryRepository()
+        repository.createFact("bot-a", "group-a", "first", "first fact", emptyList(), "user-a", Scopes.USER)
+        val secondId = repository.createFact(
+            "bot-a", "group-a", "second", "second fact", emptyList(), "user-a", Scopes.USER
+        )
+        val vectorStore = RecordingVectorStoreFactory()
+        val graphStore = RecordingGraphStoreFactory()
+        val service = MemoryService(
+            memoryAgent = MemoryAgent(repository, vectorStore, graphStore, FailingPromptExecutor()),
+            memoryRepository = repository,
+            factVectorStoreFactory = vectorStore,
+            factGraphStoreFactory = graphStore
+        )
+
+        val (page, total) = service.getAllFactsByGroupForManagement(
+            "bot-a",
+            "group-a",
+            ManageListQuery(offset = 1, limit = 1, sortBy = "id", ascending = true)
+        )
+
+        assertEquals(2, total)
+        assertEquals(listOf(secondId), page.map { it.id.value })
+    }
+
     @Test
     fun `orphan store cleanup keeps active directories and removes inactive directories`() {
         val root = Files.createTempDirectory("erii-store-cleanup-test")

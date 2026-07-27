@@ -10,6 +10,7 @@ import uesugi.common.data.HistoryTable
 import uesugi.common.data.MessageType
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.common.toolkit.logger
+import uesugi.core.manage.ManageListQuery
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -189,24 +190,46 @@ class EvolutionService {
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
+    ): Pair<List<LearnedVocabEntity>, Int> = getAllVocabulary(
+        botMark,
+        groupId,
+        ManageListQuery(offset = offset, limit = limit)
+    )
+
+    fun getAllVocabulary(
+        botMark: String,
+        groupId: String,
+        listQuery: ManageListQuery
     ): Pair<List<LearnedVocabEntity>, Int> = transaction {
-        val condition =
+        var condition: Op<Boolean> =
             (LearnedVocabTable.botMark eq botMark) and
                     (LearnedVocabTable.groupId eq groupId)
-        val baseQuery = LearnedVocabEntity.find { condition }
-        val total = baseQuery.count().toInt()
+        if (listQuery.search.isNotBlank()) {
+            condition = condition and (
+                    (LearnedVocabTable.word.lowerCase() like listQuery.searchPattern) or
+                            (LearnedVocabTable.type.lowerCase() like listQuery.searchPattern) or
+                            (LearnedVocabTable.meaning.lowerCase() like listQuery.searchPattern) or
+                            (LearnedVocabTable.example.lowerCase() like listQuery.searchPattern)
+                    )
+        }
+        val total = LearnedVocabEntity.find { condition }.count().toInt()
         val query = LearnedVocabTable
             .selectAll()
             .where { condition }
-            .orderBy(
+        when (listQuery.sortBy) {
+            "id" -> query.orderBy(LearnedVocabTable.id to listQuery.sortOrder)
+            "word" -> query.orderBy(LearnedVocabTable.word to listQuery.sortOrder, LearnedVocabTable.id to listQuery.sortOrder)
+            "weight" -> query.orderBy(LearnedVocabTable.weight to listQuery.sortOrder, LearnedVocabTable.id to listQuery.sortOrder)
+            else -> query.orderBy(
                 LearnedVocabTable.weight to SortOrder.DESC,
                 LearnedVocabTable.lastSeen to SortOrder.DESC,
-                LearnedVocabTable.word to SortOrder.ASC
+                LearnedVocabTable.id to SortOrder.DESC
             )
-        val pageQuery = if (limit > 0) {
-            query.limit(limit).offset(offset.toLong())
+        }
+        val pageQuery = if (listQuery.limit > 0) {
+            query.limit(listQuery.limit).offset(listQuery.offset.toLong())
         } else {
-            query.offset(offset.toLong())
+            query.offset(listQuery.offset.toLong())
         }
         val items = LearnedVocabEntity.wrapRows(pageQuery).toList()
 

@@ -11,6 +11,7 @@ import uesugi.common.data.HistoryEntity
 import uesugi.common.data.HistoryRecord
 import uesugi.common.data.HistoryTable
 import uesugi.common.data.toRecord
+import uesugi.core.manage.ManageListQuery
 import kotlin.time.Clock
 
 /**
@@ -140,19 +141,42 @@ class SummaryRepository {
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
+    ): Pair<List<SummaryRecord>, Int> = getSummariesByGroup(
+        botMark,
+        groupId,
+        ManageListQuery(offset = offset, limit = limit)
+    )
+
+    fun getSummariesByGroup(
+        botMark: String,
+        groupId: String,
+        listQuery: ManageListQuery
     ): Pair<List<SummaryRecord>, Int> = transaction {
-        val condition =
+        var condition: Op<Boolean> =
             (SummaryTable.botMark eq botMark) and (SummaryTable.groupId eq groupId)
-        val baseQuery = SummaryEntity.find { condition }
-        val total = baseQuery.count().toInt()
+        if (listQuery.search.isNotBlank()) {
+            condition = condition and (
+                    (SummaryTable.timeRange.lowerCase() like listQuery.searchPattern) or
+                            (SummaryTable.content.lowerCase() like listQuery.searchPattern) or
+                            (SummaryTable.keyPoints.lowerCase() like listQuery.searchPattern) or
+                            (SummaryTable.emotionalTone.lowerCase() like listQuery.searchPattern)
+                    )
+        }
+        val total = SummaryEntity.find { condition }.count().toInt()
         val query = SummaryTable
             .selectAll()
             .where { condition }
-            .orderBy(SummaryTable.createdAt to SortOrder.DESC)
-        val pageQuery = if (limit > 0) {
-            query.limit(limit).offset(offset.toLong())
+        when (listQuery.sortBy) {
+            "id" -> query.orderBy(SummaryTable.id to listQuery.sortOrder)
+            "timeRange" -> query.orderBy(SummaryTable.timeRange to listQuery.sortOrder, SummaryTable.id to listQuery.sortOrder)
+            "participantCount" -> query.orderBy(SummaryTable.participantCount to listQuery.sortOrder, SummaryTable.id to listQuery.sortOrder)
+            "messageCount" -> query.orderBy(SummaryTable.messageCount to listQuery.sortOrder, SummaryTable.id to listQuery.sortOrder)
+            else -> query.orderBy(SummaryTable.createdAt to SortOrder.DESC, SummaryTable.id to SortOrder.DESC)
+        }
+        val pageQuery = if (listQuery.limit > 0) {
+            query.limit(listQuery.limit).offset(listQuery.offset.toLong())
         } else {
-            query.offset(offset.toLong())
+            query.offset(listQuery.offset.toLong())
         }
         val items = SummaryEntity.wrapRows(pageQuery).map { it.toRecord() }
         items to total

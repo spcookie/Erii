@@ -4,6 +4,8 @@ package uesugi.core.state.memory
 
 import ai.koog.agents.core.tools.annotations.LLMDescription
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -22,6 +24,7 @@ import org.jetbrains.exposed.v1.datetime.datetime
 import uesugi.common.toolkit.LocalDateTimeAsDateSerializer
 import uesugi.core.state.emotion.EmotionTable.DEFAULT_LENGTH
 import java.util.ArrayList
+import kotlin.time.Clock
 
 /**
  * 事实记忆表 - 存储从群聊中提取的事实信息
@@ -145,7 +148,8 @@ data class FactsRecord(
     val validFrom: LocalDateTime,
     val validTo: LocalDateTime?,
     val lastRecalledAt: LocalDateTime? = null,
-    val vectorId: String? = null
+    val vectorId: String? = null,
+    val valid: Boolean
 )
 
 @Serializable
@@ -290,5 +294,11 @@ fun FactsEntity.toRecord(): FactsRecord = FactsRecord(
     validFrom = validFrom,
     validTo = validTo,
     lastRecalledAt = lastRecalledAt,
-    vectorId = vectorId
+    vectorId = vectorId,
+    valid = isCurrentlyValid()
 )
+
+private fun FactsEntity.isCurrentlyValid(): Boolean {
+    val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+    return validFrom <= now && (validTo == null || validTo!! > now)
+}

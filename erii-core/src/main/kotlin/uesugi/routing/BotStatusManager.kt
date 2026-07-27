@@ -11,6 +11,7 @@ import uesugi.common.data.EmotionalTendencies
 import uesugi.common.data.PAD
 import uesugi.core.cron.CronService
 import uesugi.core.cron.CronTaskStatus
+import uesugi.core.manage.ManageListQuery
 import uesugi.core.message.history.HistoryService
 import uesugi.core.message.resource.ResourceService
 import uesugi.core.state.emotion.BehaviorProfile
@@ -134,10 +135,16 @@ private fun ApplicationCall.botId(): String = parameters["bot-id"]!!
 private fun ApplicationCall.groupId(): String = parameters["group-id"]!!
 private fun ApplicationCall.userId(): String = parameters["user-id"]!!
 private fun ApplicationCall.intPathParam(name: String): Int? = parameters[name]?.toIntOrNull()
-private fun ApplicationCall.paginationParams(defaultLimit: Int = 0): Pair<Int, Int> {
-    val offset = request.queryParameters["offset"]?.toIntOrNull() ?: 0
-    val limit = request.queryParameters["limit"]?.toIntOrNull() ?: defaultLimit
-    return offset to limit
+private fun ApplicationCall.manageListQuery(defaultLimit: Int = 50): ManageListQuery {
+    val offset = (request.queryParameters["offset"]?.toIntOrNull() ?: 0).coerceAtLeast(0)
+    val limit = (request.queryParameters["limit"]?.toIntOrNull() ?: defaultLimit).coerceIn(1, 200)
+    return ManageListQuery(
+        offset = offset,
+        limit = limit,
+        search = request.queryParameters["query"]?.trim()?.take(200).orEmpty(),
+        sortBy = request.queryParameters["sortBy"]?.trim()?.take(50).orEmpty(),
+        ascending = request.queryParameters["order"].equals("asc", ignoreCase = true)
+    )
 }
 
 private suspend inline fun <reified T : Any> ApplicationCall.receiveOrError(): T? =
@@ -181,14 +188,18 @@ fun Routing.configureBotStatusManager() {
         val cronService by inject<CronService>()
 
         get("/api/bot/{bot-id}/group/{group-id}/facts") {
-            val (offset, limit) = call.paginationParams()
-            val (items, total) = memoryService.getAllFactsByGroup(call.botId(), call.groupId(), offset, limit)
+            val listQuery = call.manageListQuery()
+            val (items, total) = memoryService.getAllFactsByGroupForManagement(
+                call.botId(),
+                call.groupId(),
+                listQuery
+            )
             call.respond(
                 PaginatedResponse(
                     items = items.map { it.toRecord() },
                     total = total,
-                    offset = offset,
-                    limit = limit
+                    offset = listQuery.offset,
+                    limit = listQuery.limit
                 )
             )
         }
@@ -270,14 +281,14 @@ fun Routing.configureBotStatusManager() {
         }
 
         get("/api/bot/{bot-id}/group/{group-id}/user-profiles") {
-            val (offset, limit) = call.paginationParams()
-            val (items, total) = memoryService.getAllUserProfilesByGroup(call.botId(), call.groupId(), offset, limit)
+            val listQuery = call.manageListQuery()
+            val (items, total) = memoryService.getAllUserProfilesByGroup(call.botId(), call.groupId(), listQuery)
             call.respond(
                 PaginatedResponse(
                     items = items.map { it.toRecord() },
                     total = total,
-                    offset = offset,
-                    limit = limit
+                    offset = listQuery.offset,
+                    limit = listQuery.limit
                 )
             )
         }
@@ -304,9 +315,16 @@ fun Routing.configureBotStatusManager() {
         }
 
         get("/api/bot/{bot-id}/group/{group-id}/memes") {
-            val (offset, limit) = call.paginationParams()
-            val (items, total) = memeService.getAllMemos(call.botId(), call.groupId(), offset, limit)
-            call.respond(PaginatedResponse(items = items, total = total, offset = offset, limit = limit))
+            val listQuery = call.manageListQuery()
+            val (items, total) = memeService.getAllMemos(call.botId(), call.groupId(), listQuery)
+            call.respond(
+                PaginatedResponse(
+                    items = items,
+                    total = total,
+                    offset = listQuery.offset,
+                    limit = listQuery.limit
+                )
+            )
         }
 
         get("/api/bot/{bot-id}/group/{group-id}/memes/{meme-id}") {
@@ -366,14 +384,14 @@ fun Routing.configureBotStatusManager() {
         }
 
         get("/api/bot/{bot-id}/group/{group-id}/vocabulary") {
-            val (offset, limit) = call.paginationParams()
-            val (items, total) = evolutionService.getAllVocabulary(call.botId(), call.groupId(), offset, limit)
+            val listQuery = call.manageListQuery()
+            val (items, total) = evolutionService.getAllVocabulary(call.botId(), call.groupId(), listQuery)
             call.respond(
                 PaginatedResponse(
                     items = items.map { it.toRecord() },
                     total = total,
-                    offset = offset,
-                    limit = limit
+                    offset = listQuery.offset,
+                    limit = listQuery.limit
                 )
             )
         }
@@ -420,9 +438,16 @@ fun Routing.configureBotStatusManager() {
         }
 
         get("/api/bot/{bot-id}/group/{group-id}/summaries") {
-            val (offset, limit) = call.paginationParams()
-            val (items, total) = summaryService.getAllSummariesByGroup(call.botId(), call.groupId(), offset, limit)
-            call.respond(PaginatedResponse(items = items, total = total, offset = offset, limit = limit))
+            val listQuery = call.manageListQuery()
+            val (items, total) = summaryService.getAllSummariesByGroup(call.botId(), call.groupId(), listQuery)
+            call.respond(
+                PaginatedResponse(
+                    items = items,
+                    total = total,
+                    offset = listQuery.offset,
+                    limit = listQuery.limit
+                )
+            )
         }
 
         get("/api/bot/{bot-id}/group/{group-id}/summaries/{summary-id}") {
@@ -461,9 +486,16 @@ fun Routing.configureBotStatusManager() {
         // ── History ──
 
         get("/api/bot/{bot-id}/group/{group-id}/history") {
-            val (offset, limit) = call.paginationParams(defaultLimit = 500)
-            val (items, total) = historyService.getAllHistoryByGroup(call.botId(), call.groupId(), offset, limit)
-            call.respond(PaginatedResponse(items = items, total = total, offset = offset, limit = limit))
+            val listQuery = call.manageListQuery()
+            val (items, total) = historyService.getAllHistoryByGroup(call.botId(), call.groupId(), listQuery)
+            call.respond(
+                PaginatedResponse(
+                    items = items,
+                    total = total,
+                    offset = listQuery.offset,
+                    limit = listQuery.limit
+                )
+            )
         }
 
         get("/api/bot/{bot-id}/group/{group-id}/history/{history-id}") {
@@ -526,9 +558,16 @@ fun Routing.configureBotStatusManager() {
         // ── Resources ──
 
         get("/api/bot/{bot-id}/group/{group-id}/resources") {
-            val (offset, limit) = call.paginationParams(defaultLimit = 500)
-            val (items, total) = resourceService.getAllResourcesByGroup(call.botId(), call.groupId(), offset, limit)
-            call.respond(PaginatedResponse(items = items, total = total, offset = offset, limit = limit))
+            val listQuery = call.manageListQuery()
+            val (items, total) = resourceService.getAllResourcesByGroup(call.botId(), call.groupId(), listQuery)
+            call.respond(
+                PaginatedResponse(
+                    items = items,
+                    total = total,
+                    offset = listQuery.offset,
+                    limit = listQuery.limit
+                )
+            )
         }
 
         // ── Emotion ──
@@ -668,9 +707,16 @@ fun Routing.configureBotStatusManager() {
         // ── Cron Tasks ──
 
         get("/api/bot/{bot-id}/group/{group-id}/cron-tasks") {
-            val (offset, limit) = call.paginationParams()
-            val (items, total) = cronService.store.getAllTasks(call.botId(), call.groupId(), offset, limit)
-            call.respond(PaginatedResponse(items = items, total = total, offset = offset, limit = limit))
+            val listQuery = call.manageListQuery()
+            val (items, total) = cronService.store.getAllTasks(call.botId(), call.groupId(), listQuery)
+            call.respond(
+                PaginatedResponse(
+                    items = items,
+                    total = total,
+                    offset = listQuery.offset,
+                    limit = listQuery.limit
+                )
+            )
         }
 
         get("/api/bot/{bot-id}/group/{group-id}/cron-tasks/{task-id}") {

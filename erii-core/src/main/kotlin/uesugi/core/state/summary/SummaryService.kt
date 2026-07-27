@@ -6,6 +6,7 @@ import uesugi.common.data.HistoryRecord
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.common.toolkit.logger
 import uesugi.core.message.history.truncateContent
+import uesugi.core.manage.ManageListQuery
 import uesugi.core.state.dispatch.StateWorkResult
 
 /**
@@ -151,6 +152,14 @@ class SummaryService(
         limit: Int = 0
     ): Pair<List<SummaryRecord>, Int> {
         return summaryRepository.getSummariesByGroup(botMark, groupId, offset, limit)
+    }
+
+    fun getAllSummariesByGroup(
+        botMark: String,
+        groupId: String,
+        listQuery: ManageListQuery
+    ): Pair<List<SummaryRecord>, Int> {
+        return summaryRepository.getSummariesByGroup(botMark, groupId, listQuery)
     }
 
     fun getSummaryById(id: Int): SummaryRecord? {

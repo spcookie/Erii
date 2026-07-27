@@ -7,15 +7,23 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.case
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.intLiteral
+import org.jetbrains.exposed.v1.core.like
+import org.jetbrains.exposed.v1.core.lowerCase
+import org.jetbrains.exposed.v1.core.not
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uesugi.common.data.HistoryRecord
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.common.toolkit.logger
 import uesugi.core.message.history.truncateContent
+import uesugi.core.manage.ManageListQuery
 import uesugi.core.state.dispatch.StateWorkResult
 import uesugi.core.state.summary.SummaryEntity
 import uesugi.core.state.summary.SummaryTable
@@ -617,15 +625,78 @@ class MemoryService(
         }
     }
 
+    /**
+     * Returns every fact for the management UI, including expired and superseded facts.
+     * Results are sorted newest first before offset/limit are applied.
+     */
+    fun getAllFactsByGroupForManagement(
+        botMark: String,
+        groupId: String,
+        offset: Int = 0,
+        limit: Int = 0
+    ): Pair<List<FactsEntity>, Int> = getAllFactsByGroupForManagement(
+        botMark,
+        groupId,
+        ManageListQuery(offset = offset, limit = limit)
+    )
+
+    fun getAllFactsByGroupForManagement(
+        botMark: String,
+        groupId: String,
+        listQuery: ManageListQuery
+    ): Pair<List<FactsEntity>, Int> {
+        return transaction {
+            var condition: Op<Boolean> = (FactsTable.botMark eq botMark) and (FactsTable.groupId eq groupId)
+            if (listQuery.search.isNotBlank()) {
+                condition = when (listQuery.search.lowercase()) {
+                    "valid" -> condition and FactsTable.validCondition(botMark, groupId)
+                    "invalid" -> condition and not(FactsTable.validCondition(botMark, groupId))
+                    else -> {
+                        val matchingScopes = Scopes.entries.filter {
+                            it.name.lowercase().contains(listQuery.search.lowercase())
+                        }
+                        var searchCondition: Op<Boolean> =
+                            (FactsTable.keyword.lowerCase() like listQuery.searchPattern) or
+                                    (FactsTable.description.lowerCase() like listQuery.searchPattern) or
+                                    (FactsTable.subjects.lowerCase() like listQuery.searchPattern)
+                        if (matchingScopes.isNotEmpty()) {
+                            searchCondition = searchCondition or (FactsTable.scopeType inList matchingScopes)
+                        }
+                        condition and searchCondition
+                    }
+                }
+            }
+            val total = FactsEntity.find { condition }.count().toInt()
+            val query = FactsTable
+                .selectAll()
+                .where { condition }
+            when (listQuery.sortBy) {
+                "id" -> query.orderBy(FactsTable.id to listQuery.sortOrder)
+                "valid" -> {
+                    val validity = case()
+                        .When(FactsTable.validCondition(botMark, groupId), intLiteral(1))
+                        .Else(intLiteral(0))
+                    query.orderBy(validity to listQuery.sortOrder, FactsTable.id to listQuery.sortOrder)
+                }
+                "keyword" -> query.orderBy(FactsTable.keyword to listQuery.sortOrder, FactsTable.id to listQuery.sortOrder)
+                "scopeType" -> query.orderBy(FactsTable.scopeType to listQuery.sortOrder, FactsTable.id to listQuery.sortOrder)
+                else -> query.orderBy(FactsTable.createdAt to SortOrder.DESC, FactsTable.id to SortOrder.DESC)
+            }
+            val pageQuery = if (listQuery.limit > 0) {
+                query.limit(listQuery.limit).offset(listQuery.offset.toLong())
+            } else {
+                query.offset(listQuery.offset.toLong())
+            }
+            FactsEntity.wrapRows(pageQuery).toList() to total
+        }
+    }
+
     fun getFactSize(
         botMark: String,
         groupId: String
     ): Long {
         return transaction {
-            FactsEntity.find {
-                (FactsTable.botMark eq botMark) and
-                        (FactsTable.groupId eq groupId)
-            }.count()
+            FactsEntity.find { FactsTable.validCondition(botMark, groupId) }.count()
         }
     }
 
@@ -648,23 +719,44 @@ class MemoryService(
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
+    ): Pair<List<UserProfileEntity>, Int> = getAllUserProfilesByGroup(
+        botMark,
+        groupId,
+        ManageListQuery(offset = offset, limit = limit, sortBy = "createdAt", ascending = true)
+    )
+
+    fun getAllUserProfilesByGroup(
+        botMark: String,
+        groupId: String,
+        listQuery: ManageListQuery
     ): Pair<List<UserProfileEntity>, Int> {
         return transaction {
-            val condition =
+            var condition: Op<Boolean> =
                 (UserProfileTable.botMark eq botMark) and
                         (UserProfileTable.groupId eq groupId)
-            val baseQuery = UserProfileEntity.find { condition }
-            val total = baseQuery.count().toInt()
+            if (listQuery.search.isNotBlank()) {
+                condition = condition and (
+                        (UserProfileTable.userId.lowerCase() like listQuery.searchPattern) or
+                                (UserProfileTable.profile.lowerCase() like listQuery.searchPattern) or
+                                (UserProfileTable.preferences.lowerCase() like listQuery.searchPattern)
+                        )
+            }
+            val total = UserProfileEntity.find { condition }.count().toInt()
             val query = UserProfileTable
                 .selectAll()
                 .where { condition }
-                .orderBy(UserProfileTable.createdAt to SortOrder.DESC)
-            val pageQuery = if (limit > 0) {
-                query.limit(limit).offset(offset.toLong())
-            } else {
-                query.offset(offset.toLong())
+            when (listQuery.sortBy) {
+                "id" -> query.orderBy(UserProfileTable.id to listQuery.sortOrder)
+                "userId" -> query.orderBy(UserProfileTable.userId to listQuery.sortOrder, UserProfileTable.id to listQuery.sortOrder)
+                "createdAt" -> query.orderBy(UserProfileTable.createdAt to listQuery.sortOrder, UserProfileTable.id to listQuery.sortOrder)
+                else -> query.orderBy(UserProfileTable.createdAt to SortOrder.DESC, UserProfileTable.id to SortOrder.DESC)
             }
-            val items = UserProfileEntity.wrapRows(pageQuery).reversed().toList()
+            val pageQuery = if (listQuery.limit > 0) {
+                query.limit(listQuery.limit).offset(listQuery.offset.toLong())
+            } else {
+                query.offset(listQuery.offset.toLong())
+            }
+            val items = UserProfileEntity.wrapRows(pageQuery).toList()
             items to total
         }
     }
