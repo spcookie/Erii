@@ -52,6 +52,19 @@ func TestIndentedRowWithWidthKeepsLongLabelOnOneLine(t *testing.T) {
 	}
 }
 
+func TestHelpHeaderContainsProjectIdentity(t *testing.T) {
+	got := ansi.Strip(HelpHeader())
+	for _, want := range []string{
+		"https://github.com/spcookie/erii",
+		"An AI group chat bot with emotions, memory, and personality.",
+		"|_____|_| \\_\\___|___|",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("HelpHeader missing %q: %q", want, got)
+		}
+	}
+}
+
 type assertError string
 
 func (e assertError) Error() string { return string(e) }

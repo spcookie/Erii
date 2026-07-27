@@ -84,6 +84,9 @@ func init() {
 		cmd.SetOut(&help)
 		defaultHelp(cmd, args)
 		cmd.SetOut(target)
+		if cmd == cmd.Root() {
+			fmt.Fprint(target, uioutput.HelpHeader())
+		}
 		fmt.Fprint(target, uioutput.Help(help.String()))
 	})
 }
