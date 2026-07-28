@@ -73,7 +73,6 @@ class MemeRepository {
      * @param context 上下文消息
      * @return 更新后的表情包记录
      */
-    @OptIn(ExperimentalTime::class)
     fun addOrUpdateMeme(
         botId: String,
         groupId: String,
@@ -144,7 +143,6 @@ class MemeRepository {
      * @param vectorId 向量ID
      * @param analyzedCount 分析时的累计计数
      */
-    @OptIn(ExperimentalTime::class)
     fun updateAnalysis(
         memeId: Int,
         description: String,
@@ -172,7 +170,6 @@ class MemeRepository {
      *
      * @param memeId 表情包ID
      */
-    @OptIn(ExperimentalTime::class)
     fun incrementUsageCount(memeId: Int) {
         transaction {
             val memo = MemeEntity.findById(memeId)
@@ -318,7 +315,6 @@ class MemeRepository {
             .sortedWith(compareBy<Pair<String, String>> { it.first }.thenBy { it.second })
     }
 
-    @OptIn(ExperimentalTime::class)
     fun updateMeme(id: Int, description: String?, purpose: String?, tags: String?): MemeRecord? {
         return transaction {
             val memo = MemeEntity.findById(id)
@@ -333,7 +329,6 @@ class MemeRepository {
         }
     }
 
-    @OptIn(ExperimentalTime::class)
     fun createMeme(
         botId: String,
         groupId: String,
@@ -372,16 +367,6 @@ class MemeRepository {
         memo != null
     }
 
-    /**
-     * 删除低热度表情包
-     *
-     * 低热度判定（同时满足）：
-     * - updatedAt < daysAgo 天前（一段时间内没有新的出现）
-     * - seenCount < configured low-heat threshold（从未达到分析阈值，仍为噪声）
-     *
-     * @param daysAgo 距今天数（默认 7 天）
-     * @return 已删除的表情包记录列表（用于后续清理向量存储等关联资源）
-     */
     fun findMemesByResourceId(resourceId: Int): List<MemeRecord> {
         return transaction {
             MemeEntity.find {
@@ -390,7 +375,6 @@ class MemeRepository {
         }
     }
 
-    @OptIn(ExperimentalTime::class)
     fun deleteLowHeatMemes(daysAgo: Int = 7): List<MemeRecord> {
         return transaction {
             val cutoff = System.now()
@@ -449,7 +433,6 @@ class MemeRepository {
      * @param groupId 群组ID
      * @param lastHistoryId 最后扫描的 history id
      */
-    @OptIn(ExperimentalTime::class)
     fun updateScanState(botId: String, groupId: String, lastHistoryId: Int) {
         transaction {
             val existing = MemeScanStateEntity.find {
