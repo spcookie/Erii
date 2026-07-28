@@ -28,6 +28,7 @@ class Usage : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExtensi
 
     override fun onLoad(context: PluginContext) {
         context.chain { meta ->
+            if (!meta.isAdmin()) return@chain
             CommandQueue.serial("${meta.botId}:${meta.groupId}", timeout = 20.seconds) {
                 val groupName = resolveGroupName(meta)
                 val url = buildString {

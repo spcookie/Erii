@@ -5,21 +5,18 @@ import org.pf4j.Extension
 import uesugi.common.toolkit.BrowserScraper
 import uesugi.common.toolkit.BrowserScraperHolder
 import uesugi.common.toolkit.ConfigHolder
-import uesugi.onebot.sdk.client.api.sendGroupMsg
 import uesugi.onebot.core.message.buildMessage
+import uesugi.onebot.sdk.client.api.sendGroupMsg
 import uesugi.plugin.builtin.Builtin
 import uesugi.plugin.builtin.BuiltinExtension
 import uesugi.plugin.builtin.CommandQueue
 import uesugi.server.SystemConfigHolder
-import uesugi.spi.AgentExtension
-import uesugi.spi.ArgParserHolder
-import uesugi.spi.CmdExtension
-import uesugi.spi.PluginContext
+import uesugi.spi.*
 import java.util.*
 import kotlin.time.Duration.Companion.seconds
 
 @Extension(points = [AgentExtension::class])
-class RenderingStatus : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExtension {
+class Status : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExtension {
 
     override val name: String
         get() = "builtin_rendering"
@@ -36,6 +33,7 @@ class RenderingStatus : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, Buil
         val password = SystemConfigHolder.config.property("security.password").getString()
 
         context.chain { meta ->
+            if (!meta.isAdmin()) return@chain
             CommandQueue.serial("${meta.botId}:${meta.groupId}", timeout = 20.seconds) {
                 val bytes = browserScraper.takeFullScreenshot(
                     url = "http://${externalHost}:${port}/view/${meta.botId}/${meta.groupId}",
