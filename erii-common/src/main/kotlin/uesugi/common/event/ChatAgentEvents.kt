@@ -4,14 +4,6 @@ import ai.koog.serialization.JSONElement
 import ai.koog.serialization.JSONObject
 
 
-sealed interface AgentToolCallEvent {
-    val botId: String
-    val groupId: String
-    val echo: String
-    val toolName: String
-    val toolArgs: JSONObject
-}
-
 data class AgentToolCallStartEvent(
     override val botId: String,
     override val groupId: String,
@@ -29,12 +21,6 @@ data class AgentToolCallCompleteEvent(
     val toolResult: JSONElement?,
     val toolError: String?
 ) : AgentToolCallEvent
-
-sealed interface AgentDispatchEvent {
-    val botId: String
-    val groupId: String
-    val echo: String
-}
 
 class AgentRunStartEvent(
     override val botId: String,

@@ -1,17 +1,10 @@
 package uesugi.core.route
 
 import uesugi.common.BotManage
+import uesugi.common.event.CmdRouteRule
+import uesugi.common.event.LLMRouteRule
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.spi.MetaToolSetCreator
-
-interface RouteRule {
-    val name: String
-}
-
-data class LLMRouteRule(override val name: String, val description: String) : RouteRule
-
-// 简单的命令路由规则
-data class CmdRouteRule(override val name: String) : RouteRule
 
 object RouteRuleRegister {
 

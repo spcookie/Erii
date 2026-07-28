@@ -49,7 +49,7 @@ class MessagePipeline(
         }
     }
 
-    @OptIn(ExperimentalTime::class, ExperimentalUuidApi::class)
+    @OptIn(ExperimentalUuidApi::class)
     private suspend fun saveHistory(context: MessageContext): HistoryRecord {
         val parsed = context.parsedMessage
         return withContext(Dispatchers.IO) {
