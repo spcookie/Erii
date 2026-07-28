@@ -13,7 +13,6 @@ import uesugi.common.data.HistoryTable
 import uesugi.common.data.toRecord
 import uesugi.common.toolkit.logger
 import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 /**
  * 记忆仓库 - 负责数据库操作
@@ -131,17 +130,6 @@ class MemoryRepository {
             .asReversed()
     }
 
-    fun latestHistoryId(botMark: String, groupId: String): Int? = transaction {
-        HistoryTable
-            .select(HistoryTable.id)
-            .where { (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId) }
-            .orderBy(HistoryTable.id to SortOrder.DESC)
-            .limit(1)
-            .firstOrNull()
-            ?.get(HistoryTable.id)
-            ?.value
-    }
-
     /**
      * 查找或创建用户画像
      */
@@ -194,14 +182,11 @@ class MemoryRepository {
         }
     }
 
-    /**
-     * 获取全部有效事实（跨 bot/group，用于图重建）
-     */
-    fun getAllValidFacts(): List<FactsRecord> = transaction {
-        FactsEntity.find {
+    fun countAllValidFacts(): Int = transaction {
+        FactsEntity.count(
             (FactsTable.validFrom lessEq CurrentDateTime) and
                     (FactsTable.validTo.isNull() or (FactsTable.validTo greater CurrentDateTime))
-        }.map { it.toRecord() }
+        ).toInt()
     }
 
     fun getAllFactGroups(): List<Pair<String, String>> = transaction {
@@ -241,7 +226,6 @@ class MemoryRepository {
     /**
      * 创建新的事实记忆
      */
-    @OptIn(ExperimentalTime::class)
     fun createFact(
         botMark: String,
         groupId: String,
@@ -266,31 +250,10 @@ class MemoryRepository {
     }
 
     /**
-     * 废弃旧的事实记忆
-     */
-    @OptIn(ExperimentalTime::class)
-    fun deprecateFacts(botMark: String, groupId: String, keyword: String, subjects: String, scopeType: Scopes) {
-        transaction {
-            val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-            FactsTable.update({
-                (FactsTable.botMark eq botMark) and
-                        (FactsTable.groupId eq groupId) and
-                        (FactsTable.keyword eq keyword) and
-                        (FactsTable.subjects eq subjects) and
-                        (FactsTable.scopeType eq scopeType) and
-                        (FactsTable.validTo.isNull())
-            }) {
-                it[FactsTable.validTo] = now
-            }
-        }
-    }
-
-    /**
      * 根据 ID 废弃事实
      */
-    @OptIn(ExperimentalTime::class)
-    fun deprecateFactsById(botMark: String, groupId: String, factId: Int, scopeType: Scopes) {
-        transaction {
+    fun deprecateFactsById(botMark: String, groupId: String, factId: Int, scopeType: Scopes): Boolean {
+        return transaction {
             val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
             FactsTable.update({
                 (FactsTable.id eq factId) and
@@ -300,58 +263,14 @@ class MemoryRepository {
                         (FactsTable.validTo.isNull())
             }) {
                 it[FactsTable.validTo] = now
-            }
+            } > 0
         }
     }
 
     // ==================== Facts 增强 ====================
 
-    /** 获取所有有效事实（可按用户过滤） */
-    fun getFacts(botMark: String, groupId: String, userId: String? = null): List<FactsRecord> {
-        return transaction {
-            FactsEntity.find {
-                (FactsTable.botMark eq botMark) and
-                        (FactsTable.groupId eq groupId) and
-                        (FactsTable.validTo.isNull())
-            }.filter { fact ->
-                if (userId != null) fact.subjects.split(",").any { it == userId } else true
-            }.map { it.toRecord() }
-        }
-    }
-
-    /** 获取群组维度事实 */
-    fun getGroupFacts(botMark: String, groupId: String): List<FactsRecord> {
-        return transaction {
-            FactsEntity.find {
-                (FactsTable.botMark eq botMark) and
-                        (FactsTable.groupId eq groupId) and
-                        (FactsTable.scopeType eq Scopes.GROUP) and
-                        (FactsTable.validTo.isNull())
-            }.map { it.toRecord() }
-        }
-    }
-
-    /** 获取用户维度事实 */
-    fun getUserFacts(botMark: String, groupId: String, userId: String): List<FactsRecord> {
-        return transaction {
-            FactsEntity.find {
-                (FactsTable.botMark eq botMark) and
-                        (FactsTable.groupId eq groupId) and
-                        (FactsTable.scopeType eq Scopes.USER) and
-                        (FactsTable.validTo.isNull())
-            }
-                .filter { fact -> fact.subjects.split(",").any { it == userId } }
-                .map { it.toRecord() }
-        }
-    }
-
     /** 根据 ID 查询 */
     fun getFactById(id: Int): FactsRecord? = transaction { FactsEntity.findById(id)?.toRecord() }
-
-    /** 根据向量 ID 查询 */
-    fun getFactByVectorId(vectorId: String): FactsRecord? = transaction {
-        FactsEntity.find { FactsTable.vectorId eq vectorId }.firstOrNull()?.toRecord()
-    }
 
     fun updateFact(
         id: Int,
@@ -384,8 +303,16 @@ class MemoryRepository {
         FactsTable.update({ FactsTable.id eq id }) { it[FactsTable.vectorId] = vectorId }
     }
 
+    fun updateFactVectorIds(values: List<Pair<Int, String>>) {
+        if (values.isEmpty()) return
+        transaction {
+            values.forEach { (id, vectorId) ->
+                FactsTable.update({ FactsTable.id eq id }) { it[FactsTable.vectorId] = vectorId }
+            }
+        }
+    }
+
     /** 标记事实记忆最近一次被召回的时间。 */
-    @OptIn(ExperimentalTime::class)
     fun markFactsRecalled(ids: Collection<Int>) {
         if (ids.isEmpty()) return
         transaction {
@@ -397,9 +324,9 @@ class MemoryRepository {
     }
 
     /** 物理删除已经失效的事实记忆，并返回被删除记录用于清理向量。 */
-    fun deleteExpiredFacts(): List<FactsRecord> = transaction {
+    fun deleteExpiredFacts(cutoff: kotlinx.datetime.LocalDateTime): List<FactsRecord> = transaction {
         val expiredFacts = FactsEntity.find {
-            FactsTable.validTo.isNotNull() and (FactsTable.validTo less CurrentDateTime)
+            FactsTable.validTo.isNotNull() and (FactsTable.validTo less cutoff)
         }.map { it.toRecord() }
         expiredFacts.forEach { fact -> FactsEntity.findById(fact.id)?.delete() }
         expiredFacts
@@ -428,62 +355,6 @@ class MemoryRepository {
         }.firstOrNull()
         entity?.delete()
         entity != null
-    }
-
-    /**
-     * 获取最新创建的事实（根据 keyword 和 scopeType）
-     */
-    fun getLatestFact(
-        botMark: String,
-        groupId: String,
-        keyword: String,
-        scopeType: Scopes
-    ): FactsRecord? {
-        return transaction {
-            FactsEntity.find {
-                (FactsTable.botMark eq botMark) and
-                        (FactsTable.groupId eq groupId) and
-                        (FactsTable.keyword eq keyword) and
-                        (FactsTable.scopeType eq scopeType) and
-                        (FactsTable.validTo.isNull())
-            }.orderBy(FactsTable.createdAt to SortOrder.DESC)
-                .firstOrNull()
-                ?.toRecord()
-        }
-    }
-
-    /**
-     * 根据 keyword 和 subjects 获取事实
-     */
-    fun getFactByKeywordAndSubjects(
-        botMark: String,
-        groupId: String,
-        keyword: String,
-        subjects: String,
-        scopeType: Scopes
-    ): FactsRecord? {
-        return transaction {
-            FactsEntity.find {
-                (FactsTable.botMark eq botMark) and
-                        (FactsTable.groupId eq groupId) and
-                        (FactsTable.keyword eq keyword) and
-                        (FactsTable.subjects eq subjects) and
-                        (FactsTable.scopeType eq scopeType) and
-                        (FactsTable.validTo.isNull())
-            }.firstOrNull()
-                ?.toRecord()
-        }
-    }
-
-    /** 检查是否存在 */
-    fun factExists(botMark: String, groupId: String, keyword: String, subjects: String): Boolean = transaction {
-        FactsEntity.find {
-            (FactsTable.botMark eq botMark) and
-                    (FactsTable.groupId eq groupId) and
-                    (FactsTable.keyword eq keyword) and
-                    (FactsTable.subjects eq subjects) and
-                    (FactsTable.validTo.isNull())
-        }.firstOrNull() != null
     }
 
     /** 查询未处理消息 */

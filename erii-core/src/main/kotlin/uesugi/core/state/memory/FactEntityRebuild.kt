@@ -1,22 +1,15 @@
 package uesugi.core.state.memory
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.core.DatabaseConfig
-import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
-import uesugi.config.ConnectionFactoryConfig
-import uesugi.config.migrationIf
-
-data class FactEntityRebuildOptions(
-    val dryRun: Boolean = false,
-    val onlyEmpty: Boolean = true,
-    val includeInvalid: Boolean = false,
-    val botMark: String? = null,
-    val groupId: String? = null,
-    val limit: Int? = null
-)
+import org.apache.lucene.analysis.CharArraySet
+import org.apache.lucene.analysis.cn.smart.SmartChineseAnalyzer
+import org.apache.lucene.analysis.en.EnglishAnalyzer
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
+import java.io.StringReader
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.use
 
 data class FactEntityRebuildSummary(
     val scanned: Int,
@@ -43,14 +36,11 @@ class FactEntityRebuildRunner(
     private val repository: MemoryRepository,
     private val analyzer: suspend (FactsRecord) -> List<String>
 ) {
-    suspend fun run(options: FactEntityRebuildOptions = FactEntityRebuildOptions()): FactEntityRebuildReport {
+    suspend fun run(): FactEntityRebuildReport {
         val facts = withContext(Dispatchers.IO) {
             repository.getFactsForEntityRebuild(
-                botMark = options.botMark,
-                groupId = options.groupId,
-                onlyEmptyEntities = options.onlyEmpty,
-                includeInvalid = options.includeInvalid,
-                limit = options.limit
+                onlyEmptyEntities = true,
+                includeInvalid = false
             )
         }
 
@@ -58,7 +48,7 @@ class FactEntityRebuildRunner(
             try {
                 val normalized = normalizeEntities(analyzer(fact))
                 val changed = normalized != fact.entities
-                if (changed && !options.dryRun) {
+                if (changed) {
                     withContext(Dispatchers.IO) {
                         repository.updateFactEntities(fact.id, normalized)
                     }
@@ -68,7 +58,7 @@ class FactEntityRebuildRunner(
                     keyword = fact.keyword,
                     before = fact.entities,
                     after = normalized,
-                    updated = changed && !options.dryRun
+                    updated = changed
                 )
             } catch (e: Exception) {
                 FactEntityRebuildItem(
@@ -97,86 +87,47 @@ class FactEntityRebuildRunner(
             .distinct()
 }
 
-fun parseFactEntityRebuildOptions(args: Array<String>): FactEntityRebuildOptions {
-    var dryRun = false
-    var onlyEmpty = true
-    var includeInvalid = false
-    var botMark: String? = null
-    var groupId: String? = null
-    var limit: Int? = null
+internal fun extractEntityCandidates(text: String): List<String> {
+    if (text.isBlank()) return emptyList()
 
-    var index = 0
-    while (index < args.size) {
-        when (val arg = args[index]) {
-            "--dry-run" -> dryRun = true
-            "--all" -> onlyEmpty = false
-            "--include-invalid" -> includeInvalid = true
-            "--bot" -> botMark = args.valueAfter(arg, ++index)
-            "--group" -> groupId = args.valueAfter(arg, ++index)
-            "--limit" -> limit = args.valueAfter(arg, ++index).toInt()
-            else -> throw IllegalArgumentException("Unknown option: $arg")
+    return SmartChineseAnalyzer(entityAnalyzerStopWords).use { analyzer ->
+        analyzer.tokenStream("entities", StringReader(text)).use { tokenStream ->
+            val term = tokenStream.addAttribute(CharTermAttribute::class.java)
+            val candidates = linkedSetOf<String>()
+            tokenStream.reset()
+            while (tokenStream.incrementToken() && candidates.size < 16) {
+                term.toString().trim()
+                    .takeIf { it.length >= 2 }
+                    ?.let(candidates::add)
+            }
+            tokenStream.end()
+            candidates.toList()
         }
-        index++
-    }
-
-    return FactEntityRebuildOptions(
-        dryRun = dryRun,
-        onlyEmpty = onlyEmpty,
-        includeInvalid = includeInvalid,
-        botMark = botMark,
-        groupId = groupId,
-        limit = limit
-    )
-}
-
-fun main(args: Array<String>) = runBlocking {
-    val options = parseFactEntityRebuildOptions(args)
-    val dataSource = ConnectionFactoryConfig().getDataSource()
-    val database = Database.connect(
-        datasource = dataSource,
-        databaseConfig = DatabaseConfig {
-            useNestedTransactions = true
-        }
-    )
-    TransactionManager.defaultDatabase = database
-    migrationIf(true, database)
-
-    val runner = FactEntityRebuildRunner(MemoryRepository()) { fact ->
-        extractEntityCandidates(fact.description)
-    }
-    val report = runner.run(options)
-
-    println("Fact entity rebuild: ${report.summary}")
-    report.items.forEach { item ->
-        val status = when {
-            item.error != null -> "FAILED ${item.error}"
-            item.updated -> "UPDATED"
-            else -> "UNCHANGED"
-        }
-        println("#${item.factId} $status ${item.keyword}: ${item.before} -> ${item.after}")
     }
 }
 
-private fun Array<String>.valueAfter(option: String, index: Int): String =
-    getOrNull(index) ?: throw IllegalArgumentException("$option requires a value")
+private val entityAnalyzerStopWords: CharArraySet =
+    CharArraySet.copy(SmartChineseAnalyzer.getDefaultStopSet()).apply {
+        addAll(EnglishAnalyzer.getDefaultStopSet())
+    }
 
-private fun extractEntityCandidates(text: String): List<String> {
-    val words = Regex("""[\p{IsHan}A-Za-z0-9_/\-.]{2,}""")
-        .findAll(text)
-        .map { it.value.trim() }
-        .filterNot { it in entityStopWords }
-        .toList()
-    return words.distinct().take(16)
+internal fun removeOrphanStoreDirectories(
+    root: Path,
+    activeKeys: Set<String>,
+    closeStore: (String) -> Unit
+): List<String> {
+    if (!Files.isDirectory(root)) return emptyList()
+
+    val orphanPaths = Files.list(root).use { paths ->
+        paths.filter(Files::isDirectory)
+            .filter { it.fileName.toString() !in activeKeys }
+            .sorted()
+            .toList()
+    }
+    return orphanPaths.map { path ->
+        val key = path.fileName.toString()
+        closeStore(key)
+        check(path.toFile().deleteRecursively()) { "Failed to remove orphan store: $path" }
+        key
+    }
 }
-
-private val entityStopWords = setOf(
-    "user",
-    "from",
-    "to",
-    "and",
-    "the",
-    "已经",
-    "开始",
-    "用户",
-    "事实"
-)

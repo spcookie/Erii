@@ -14,6 +14,32 @@ import uesugi.common.toolkit.logger
 import uesugi.core.message.history.asLlmPrompt
 import kotlin.time.ExperimentalTime
 
+private fun normalizedSubjects(subjects: String): Set<String> =
+    subjects.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
+private fun normalizedKeyword(keyword: String): String = keyword.trim().lowercase()
+
+internal fun isReplacementCandidate(newFact: ExtractedFact, existingFact: FactsRecord): Boolean {
+    if (newFact.scope != existingFact.scopeType) return false
+    if (normalizedKeyword(newFact.keyword) != normalizedKeyword(existingFact.keyword)) return false
+    if (newFact.scope == Scopes.GROUP) return true
+    val newSubjects = normalizedSubjects(newFact.subjects)
+    val existingSubjects = normalizedSubjects(existingFact.subjects)
+    return newSubjects.isNotEmpty() && existingSubjects.isNotEmpty() && newSubjects.intersect(existingSubjects).isNotEmpty()
+}
+
+internal fun selectConflictCandidates(
+    newFacts: List<ExtractedFact>,
+    existingFacts: List<FactsRecord>
+): List<FactsRecord> = existingFacts.filter { existing ->
+    newFacts.any { newFact -> isReplacementCandidate(newFact, existing) }
+}
+
+internal fun isDeleteBackedBySuccessfulAdd(
+    candidate: FactsRecord,
+    successfulAdds: List<ExtractedFact>
+): Boolean = successfulAdds.any { newFact -> isReplacementCandidate(newFact, candidate) }
+
 /**
  * 记忆代理 - 负责从历史消息中提取和生成各类记忆数据
  *
@@ -21,7 +47,7 @@ import kotlin.time.ExperimentalTime
  * 1. LLM 提取事实（extractFacts）
  *    → 输出 {"facts": [{keyword, description, values, subjects, scope}]}
  * 2. LLM 冲突解决（resolveConflicts）
- *    → 对比已有记忆 + 独立审查过时 → ADD / DELETE / NONE
+ *    → 仅对比同主体、同属性的候选记忆 → ADD / DELETE / NONE
  * 3. 批量执行决策（executeDecisions）
  *    → 数据库操作（增删）
  * 4. 统一向量同步（syncVectors）
@@ -36,6 +62,7 @@ class MemoryAgent(
 
     companion object {
         private val log = logger()
+        private const val MAX_DELETES_PER_BATCH = 10
     }
 
     // ==================== 数据模型 ====================
@@ -69,7 +96,6 @@ class MemoryAgent(
     /**
      * 分析用户画像和偏好
      */
-    @OptIn(ExperimentalTime::class)
     suspend fun analyzeUserProfile(
         messages: List<HistoryRecord>,
         userProfileEntity: UserProfileRecord?
@@ -283,7 +309,6 @@ class MemoryAgent(
      * Step 3: 批量执行决策 → 数据库操作
      * Step 4: 统一向量同步 → Embedding → Vector Store
      */
-    @OptIn(ExperimentalTime::class)
     suspend fun organize(
         botMark: String,
         groupId: String,
@@ -305,17 +330,16 @@ class MemoryAgent(
             memoryRepository.getValidFacts(botMark, groupId)
         }
 
-        // 即使没有新事实，如果有已有记忆，仍需审查已有记忆是否过时
-        if (extraction.facts.isEmpty() && existingFacts.isEmpty()) {
-            log.debug("No facts extracted and no existing memory, groupId=$groupId")
+        if (extraction.facts.isEmpty()) {
+            log.debug("No facts extracted; existing memories will not be reviewed for deletion, groupId=$groupId")
             return
         }
 
-        // Step 3: 冲突解决（按作用域分开处理，USER/GROUP 各自独立审查）
+        // Step 3: 冲突解决（按作用域分开，仅比较同主体、同属性候选）
         val userFacts = extraction.facts.filter { it.scope == Scopes.USER }
         val groupFacts = extraction.facts.filter { it.scope == Scopes.GROUP }
-        val existingUserFacts = existingFacts.filter { it.scopeType == Scopes.USER }
-        val existingGroupFacts = existingFacts.filter { it.scopeType == Scopes.GROUP }
+        val existingUserFacts = selectConflictCandidates(userFacts, existingFacts)
+        val existingGroupFacts = selectConflictCandidates(groupFacts, existingFacts)
 
         val userResolution = try {
             resolveConflicts(userFacts, existingUserFacts, messages)
@@ -337,7 +361,13 @@ class MemoryAgent(
         log.info("Conflict resolution completed, groupId=$groupId, decisions=$actionCounts")
 
         // Step 4: 批量执行决策
-        val affectedFacts = executeDecisions(botMark, groupId, allDecisions)
+        val affectedFacts = executeDecisions(
+            botMark = botMark,
+            groupId = groupId,
+            decisions = allDecisions,
+            proposedFacts = extraction.facts,
+            conflictCandidates = existingUserFacts + existingGroupFacts
+        )
 
         // Step 4.5: 同步图存储（实体三元组）
         syncGraph(affectedFacts, botMark, groupId)
@@ -520,15 +550,15 @@ class MemoryAgent(
                 - ADD: 新信息，与已有记忆不冲突，添加
                 - NONE: 与已有记忆完全重复，跳过
 
-                ### 2. 清理过时记忆
-                阅读原始聊天消息，找出已过时的已有记忆并 DELETE：
-                - 消息内容与已有记忆矛盾（已有"用户A在北京"，消息显示A在上海）
-                - 状态已变化（旧值失效，如有新值则同时 ADD 新版本）
-                - 临时性记忆，已不适用
+                ### 2. 替换冲突记忆
+                DELETE 只能用于被新事实明确替换的候选旧记忆：
+                - 必须同时输出对应的 ADD 新版本
+                - 必须是同一主体、同一 scope、同一 keyword 属性
+                - 仅仅没有在最新消息中再次提到，不代表旧记忆过时
+                - 禁止独立清理、猜测失效或删除与新事实无关的记忆
 
                 ## 规则
                 - 同一属性值变化 → DELETE 旧 + ADD 新（两个决策）
-                - 已过时且无新值 → 仅 DELETE
                 - 完全重复 → NONE
 
                 ## 输出格式
@@ -553,16 +583,16 @@ class MemoryAgent(
             user {
                 text(
                     """
-                    ## 原始聊天消息（用于独立判断已有记忆是否过时）
+                    ## 原始聊天消息（仅用于核对新旧事实是否明确冲突）
                     $msgText
 
                     ## 新提取的事实候选
                     $newFactsText
 
-                    ## 已有记忆（请逐条审查是否仍有效）
+                    ## 与新事实同主体、同属性的候选已有记忆
                     $existingFactsText
 
-                    请输出完整决策列表。注意：对已有记忆中已过时或描述临时活动的内容，即使新事实中没有对应项也要产生 DELETE 决策。
+                    请输出完整决策列表。DELETE 必须与同属性的 ADD 新版本同时出现；不要审查或删除候选列表之外的记忆。
                     """.trimIndent()
                 )
             }
@@ -585,33 +615,75 @@ class MemoryAgent(
     private suspend fun executeDecisions(
         botMark: String,
         groupId: String,
-        decisions: List<MemoryDecision>
+        decisions: List<MemoryDecision>,
+        proposedFacts: List<ExtractedFact>,
+        conflictCandidates: List<FactsRecord>
     ): AffectedFacts {
         val added = mutableListOf<FactsRecord>()
         val deleted = mutableListOf<DeletedFact>()
+        val successfulAdds = mutableListOf<Pair<ExtractedFact, FactsRecord>>()
+        val candidateById = conflictCandidates.associateBy { it.id }
 
-        for (decision in decisions) {
-            when (decision.action) {
-                MemoryAction.ADD -> {
-                    decision.newFact?.let { fact ->
-                        createAndFetchFact(botMark, groupId, fact)?.let { added.add(it) }
-                    }
+        decisions.filter { it.action == MemoryAction.ADD }.forEach { decision ->
+            val requestedFact = decision.newFact ?: return@forEach
+            val proposedFact = proposedFacts.firstOrNull { it == requestedFact }
+            if (proposedFact == null) {
+                log.warn("Skipped memory ADD not present in extracted facts, groupId=$groupId, keyword=${requestedFact.keyword}")
+                return@forEach
+            }
+            createAndFetchFact(botMark, groupId, proposedFact)?.let { created ->
+                added.add(created)
+                successfulAdds.add(proposedFact to created)
+            }
+        }
+        val successfulAddFacts = successfulAdds.map { it.first }
+
+        val approvedDeletes = decisions
+            .filter { it.action == MemoryAction.DELETE }
+            .distinctBy { it.existingFactId }
+            .mapNotNull { decision ->
+                val existingId = decision.existingFactId
+                val candidate = existingId?.let(candidateById::get)
+                if (existingId == null || candidate == null) {
+                    log.warn("Skipped memory DELETE outside conflict candidates, groupId=$groupId, factId=$existingId")
+                    return@mapNotNull null
                 }
-
-                MemoryAction.DELETE -> {
-                    val existingId = decision.existingFactId ?: continue
-                    val fact = withContext(Dispatchers.IO) {
-                        memoryRepository.getFactById(existingId)
-                    }
-                    fact?.let {
-                        deleted.add(DeletedFact(existingId, it.vectorId))
-                        withContext(Dispatchers.IO) {
-                            memoryRepository.deprecateFactsById(botMark, groupId, existingId, it.scopeType)
-                        }
-                    }
+                if (!isDeleteBackedBySuccessfulAdd(candidate, successfulAddFacts)) {
+                    log.warn(
+                        "Skipped memory DELETE without successful replacement ADD, " +
+                                "groupId=$groupId, factId=$existingId, keyword=${candidate.keyword}"
+                    )
+                    return@mapNotNull null
                 }
+                decision to candidate
+            }
 
-                MemoryAction.NONE -> {}
+        val deleteLimit = (successfulAdds.size * 2).coerceIn(0, MAX_DELETES_PER_BATCH)
+        val deleteRatioUnsafe = conflictCandidates.size >= 5 && approvedDeletes.size * 2 > conflictCandidates.size
+        if (approvedDeletes.size > deleteLimit || deleteRatioUnsafe) {
+            log.warn(
+                "Skipped unsafe memory DELETE batch, groupId=$groupId, requested=${approvedDeletes.size}, " +
+                        "candidates=${conflictCandidates.size}, successfulAdds=${successfulAdds.size}"
+            )
+        } else {
+            approvedDeletes.forEach { (decision, candidate) ->
+                val deprecated = withContext(Dispatchers.IO) {
+                    memoryRepository.deprecateFactsById(
+                        botMark = botMark,
+                        groupId = groupId,
+                        factId = candidate.id,
+                        scopeType = candidate.scopeType
+                    )
+                }
+                if (deprecated) {
+                    deleted.add(DeletedFact(candidate.id, candidate.vectorId))
+                    log.info(
+                        "Memory fact deprecated, groupId=$groupId, factId=${candidate.id}, " +
+                                "keyword=${candidate.keyword}, reason=${decision.reason}"
+                    )
+                } else {
+                    log.warn("Memory DELETE matched no current fact, groupId=$groupId, factId=${candidate.id}")
+                }
             }
         }
 

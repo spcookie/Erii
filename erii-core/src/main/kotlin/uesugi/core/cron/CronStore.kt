@@ -7,6 +7,7 @@ import kotlinx.serialization.json.Json
 import org.mapdb.HTreeMap
 import org.mapdb.Serializer
 import uesugi.core.component.storage.MapDB
+import uesugi.core.manage.ManageListQuery
 
 @Serializable
 private data class CronTaskIds(val ids: Set<String> = emptySet())
@@ -93,13 +94,45 @@ class CronStore {
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
+    ): Pair<List<CronTask>, Int> = getAllTasks(
+        botId,
+        groupId,
+        ManageListQuery(offset = offset, limit = limit)
+    )
+
+    suspend fun getAllTasks(
+        botId: String,
+        groupId: String,
+        listQuery: ManageListQuery
     ): Pair<List<CronTask>, Int> {
         val ids = getAllTaskIds(botId, groupId)
-        val sortedIds = ids.sorted()
-        val total = sortedIds.size
-        val pageIds = if (limit > 0) sortedIds.drop(offset).take(limit) else sortedIds.drop(offset)
-        val items = pageIds.mapNotNull { id -> getTask(botId, groupId, id) }
-        return items to total
+        val search = listQuery.search.lowercase()
+        val tasks = ids.mapNotNull { id -> getTask(botId, groupId, id) }
+            .filter { task ->
+                search.isBlank() || listOf(
+                    task.taskId,
+                    task.content,
+                    task.targetUserId.orEmpty(),
+                    task.taskType.name,
+                    task.triggerType?.name.orEmpty(),
+                    task.status.name
+                ).any { it.lowercase().contains(search) }
+            }
+        val primaryComparator = when (listQuery.sortBy) {
+            "taskType" -> compareBy<CronTask> { it.taskType.name }
+            "triggerTime" -> compareBy { it.triggerTime }
+            "status" -> compareBy { it.status.name }
+            "firedAt" -> Comparator<CronTask> { first, second -> compareValues(first.firedAt, second.firedAt) }
+            else -> compareBy { it.taskId }
+        }
+        val comparator = primaryComparator.thenBy { it.taskId }
+        val sorted = tasks.sortedWith(if (listQuery.ascending) comparator else comparator.reversed())
+        val items = if (listQuery.limit > 0) {
+            sorted.drop(listQuery.offset).take(listQuery.limit)
+        } else {
+            sorted.drop(listQuery.offset)
+        }
+        return items to tasks.size
     }
 
     suspend fun getAllBotGroupKeys(): List<BotGroupKey> = withContext(Dispatchers.IO) {

@@ -7,6 +7,7 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uesugi.common.data.*
+import uesugi.core.manage.ManageListQuery
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
@@ -69,20 +70,48 @@ class HistoryService {
         groupId: String,
         offset: Int = 0,
         limit: Int = 500
+    ): Pair<List<HistoryRecord>, Int> = getAllHistoryByGroup(
+        botMark,
+        groupId,
+        ManageListQuery(offset = offset, limit = limit)
+    )
+
+    fun getAllHistoryByGroup(
+        botMark: String,
+        groupId: String,
+        listQuery: ManageListQuery
     ): Pair<List<HistoryRecord>, Int> {
         return transaction {
-            val condition =
+            var condition: Op<Boolean> =
                 (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId)
-            val baseQuery = HistoryEntity.find { condition }
-            val total = baseQuery.count().toInt()
+            if (listQuery.search.isNotBlank()) {
+                val matchingTypes = MessageType.entries.filter {
+                    it.name.lowercase().contains(listQuery.search.lowercase())
+                }
+                var searchCondition: Op<Boolean> =
+                        (HistoryTable.userId.lowerCase() like listQuery.searchPattern) or
+                                (HistoryTable.nick.lowerCase() like listQuery.searchPattern) or
+                                (HistoryTable.content.lowerCase() like listQuery.searchPattern)
+                if (matchingTypes.isNotEmpty()) {
+                    searchCondition = searchCondition or (HistoryTable.messageType inList matchingTypes)
+                }
+                condition = condition and searchCondition
+            }
+            val total = HistoryEntity.find { condition }.count().toInt()
             val query = HistoryTable
                 .selectAll()
                 .where { condition }
-                .orderBy(HistoryTable.createdAt to SortOrder.DESC)
-            val pageQuery = if (limit > 0) {
-                query.limit(limit).offset(offset.toLong())
+            when (listQuery.sortBy) {
+                "id" -> query.orderBy(HistoryTable.id to listQuery.sortOrder)
+                "nick" -> query.orderBy(HistoryTable.nick to listQuery.sortOrder, HistoryTable.id to listQuery.sortOrder)
+                "messageType" -> query.orderBy(HistoryTable.messageType to listQuery.sortOrder, HistoryTable.id to listQuery.sortOrder)
+                "createdAt" -> query.orderBy(HistoryTable.createdAt to listQuery.sortOrder, HistoryTable.id to listQuery.sortOrder)
+                else -> query.orderBy(HistoryTable.createdAt to SortOrder.DESC, HistoryTable.id to SortOrder.DESC)
+            }
+            val pageQuery = if (listQuery.limit > 0) {
+                query.limit(listQuery.limit).offset(listQuery.offset.toLong())
             } else {
-                query.offset(offset.toLong())
+                query.offset(listQuery.offset.toLong())
             }
             val items = HistoryEntity.wrapRows(pageQuery)
                 .map { it.toRecord() }

@@ -3,7 +3,6 @@ package manage
 import (
 	"erii-cli/internal/api"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -48,9 +47,10 @@ var previewHelpKeys = previewHelpKeyMap{}
 // Messages
 
 type dataLoadedMsg struct {
-	Items []any
-	Total int
-	Error error
+	Items     []any
+	Total     int
+	RequestID int
+	Error     error
 }
 
 type deleteDoneMsg struct {
@@ -97,11 +97,13 @@ type DataTableModel struct {
 	keys      tableKeys
 	help      help.Model
 
-	pageSize    int
-	currentPage int
-	totalCount  int
-	sortCol     int
-	sortAsc     bool
+	pageSize              int
+	currentPage           int
+	totalCount            int
+	sortCol               int
+	sortAsc               bool
+	requestID             int
+	cursorBottomAfterLoad bool
 }
 
 func NewDataTableModel(api *api.Client, rt ResourceType, bot api.BotInfo, group api.GroupInfo) *DataTableModel {
@@ -132,7 +134,7 @@ func NewDataTableModel(api *api.Client, rt ResourceType, bot api.BotInfo, group 
 		loading:      true,
 		width:        80,
 		height:       24,
-		pageSize:     20,
+		pageSize:     0,
 		currentPage:  0,
 		sortCol:      -1,
 		sortAsc:      true,
@@ -162,10 +164,54 @@ func newConfirmForm(title, description string, value *bool, width int) *huh.Form
 }
 
 func (m *DataTableModel) Init() tea.Cmd {
-	return func() tea.Msg {
-		items, total, err := loadResourceData(m.resourceType, m.api, m.botID, m.groupID)
-		return dataLoadedMsg{Items: items, Total: total, Error: err}
+	// Wait for WindowSizeMsg so the first server page uses the number of rows
+	// that can actually be displayed instead of an arbitrary default limit.
+	if m.pageSize <= 0 {
+		return nil
 	}
+	return m.loadPage()
+}
+
+func (m *DataTableModel) loadPage() tea.Cmd {
+	m.requestID++
+	requestID := m.requestID
+	options := api.ListOptions{
+		Offset: m.currentPage * m.pageSize,
+		Limit:  m.pageSize,
+		Query:  m.searchQuery,
+	}
+	if m.sortCol >= 0 && m.sortCol < len(m.formatter.sortColumns) {
+		options.SortBy = serverSortField(m.resourceType, m.sortCol)
+		if m.sortAsc {
+			options.Order = "asc"
+		} else {
+			options.Order = "desc"
+		}
+	}
+	m.loading = true
+	m.err = nil
+	return func() tea.Msg {
+		items, total, err := loadResourceData(m.resourceType, m.api, m.botID, m.groupID, options)
+		return dataLoadedMsg{Items: items, Total: total, RequestID: requestID, Error: err}
+	}
+}
+
+func serverSortField(resourceType ResourceType, sortCol int) string {
+	fields := map[ResourceType][]string{
+		ResourceFacts:        {"id", "valid", "keyword", "scopeType"},
+		ResourceProfiles:     {"id", "userId"},
+		ResourceMemes:        {"id", "description", "seenCount", "usageCount"},
+		ResourceVocabularies: {"id", "word", "weight"},
+		ResourceSummaries:    {"id", "timeRange", "participantCount", "messageCount"},
+		ResourceHistory:      {"id", "nick", "messageType", "createdAt"},
+		ResourceResource:     {"id", "fileName", "size"},
+		ResourceCronTasks:    {"taskId", "taskType", "triggerTime", "status", "firedAt"},
+	}
+	resourceFields := fields[resourceType]
+	if sortCol < 0 || sortCol >= len(resourceFields) {
+		return ""
+	}
+	return resourceFields[sortCol]
 }
 
 func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -239,18 +285,34 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.help.Width = msg.Width
-		m.updateTableSize()
+		if m.updateTableSize() {
+			return m, m.loadPage()
+		}
 		return m, nil
 
 	case dataLoadedMsg:
+		if msg.RequestID != m.requestID {
+			return m, nil
+		}
 		m.loading = false
 		if msg.Error != nil {
 			m.err = msg.Error
 			return m, nil
 		}
 		m.items = msg.Items
+		m.filteredItems = msg.Items
 		m.totalCount = msg.Total
-		m.applyFilter()
+		if len(msg.Items) == 0 && msg.Total > 0 && m.currentPage >= m.pageCount() {
+			m.currentPage = m.pageCount() - 1
+			return m, m.loadPage()
+		}
+		m.updateTableRows()
+		if m.cursorBottomAfterLoad && len(m.table.Rows()) > 0 {
+			m.table.SetCursor(len(m.table.Rows()) - 1)
+		} else {
+			m.table.SetCursor(0)
+		}
+		m.cursorBottomAfterLoad = false
 		return m, nil
 
 	case deleteDoneMsg:
@@ -259,10 +321,7 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Error
 			return m, nil
 		}
-		return m, func() tea.Msg {
-			items, total, err := loadResourceData(m.resourceType, m.api, m.botID, m.groupID)
-			return dataLoadedMsg{Items: items, Total: total, Error: err}
-		}
+		return m, m.loadPage()
 
 	case batchDeleteDoneMsg:
 		m.loading = false
@@ -270,18 +329,10 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Error
 		}
 		m.selected = make(map[string]bool)
-		return m, func() tea.Msg {
-			items, total, err := loadResourceData(m.resourceType, m.api, m.botID, m.groupID)
-			return dataLoadedMsg{Items: items, Total: total, Error: err}
-		}
+		return m, m.loadPage()
 
 	case RefreshMsg:
-		m.loading = true
-		m.err = nil
-		return m, func() tea.Msg {
-			items, total, err := loadResourceData(m.resourceType, m.api, m.botID, m.groupID)
-			return dataLoadedMsg{Items: items, Total: total, Error: err}
-		}
+		return m, m.loadPage()
 
 	case tea.KeyMsg:
 		if key.Matches(msg, m.keys.Quit) {
@@ -289,49 +340,34 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.searching {
-			if key.Matches(msg, m.keys.Up) {
-				return m.moveUp()
-			}
-			if key.Matches(msg, m.keys.Down) {
-				return m.moveDown()
-			}
-			if key.Matches(msg, m.keys.PageUp) {
-				return m.prevPage()
-			}
-			if key.Matches(msg, m.keys.PageDown) {
-				return m.nextPage()
-			}
-
 			switch msg.Type {
 			case tea.KeyEsc:
 				m.searching = false
 				m.searchInput.Blur()
+				m.searchInput.SetValue("")
 				m.searchQuery = ""
-				m.applyFilter()
+				m.currentPage = 0
 				m.updateTableSize()
-				return m, nil
+				return m, m.loadPage()
 			case tea.KeyEnter:
 				m.searching = false
 				m.searchInput.Blur()
-				m.searchQuery = m.searchInput.Value()
-				m.applyFilter()
+				m.searchQuery = strings.TrimSpace(m.searchInput.Value())
+				m.currentPage = 0
 				m.updateTableSize()
-				return m, nil
+				return m, m.loadPage()
 			default:
-				if msg.Type == tea.KeyRunes || msg.Type == tea.KeyBackspace {
-					var cmd tea.Cmd
-					m.searchInput, cmd = m.searchInput.Update(msg)
-					m.searchQuery = m.searchInput.Value()
-					m.applyFilter()
-					return m, cmd
-				}
+				var cmd tea.Cmd
+				m.searchInput, cmd = m.searchInput.Update(msg)
+				return m, cmd
 			}
-			return m, nil
 		}
 
 		if key.Matches(msg, m.keys.Help) {
 			m.help.ShowAll = !m.help.ShowAll
-			m.updateTableSize()
+			if m.updateTableSize() {
+				return m, m.loadPage()
+			}
 			return m, nil
 		}
 		if key.Matches(msg, m.keys.Back) {
@@ -340,16 +376,13 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, m.keys.Search) {
 			m.searching = true
 			m.searchInput.Focus()
-			m.updateTableSize()
+			if m.updateTableSize() {
+				return m, tea.Batch(textinput.Blink, m.loadPage())
+			}
 			return m, textinput.Blink
 		}
 		if key.Matches(msg, m.keys.Refresh) {
-			m.loading = true
-			m.err = nil
-			return m, func() tea.Msg {
-				items, total, err := loadResourceData(m.resourceType, m.api, m.botID, m.groupID)
-				return dataLoadedMsg{Items: items, Total: total, Error: err}
-			}
+			return m, m.loadPage()
 		}
 		if key.Matches(msg, m.keys.New) && m.formatter.canCreate {
 			return m, func() tea.Msg {
@@ -460,10 +493,8 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, m.keys.SortToggle) {
 			if m.sortCol >= 0 {
 				m.sortAsc = !m.sortAsc
-				m.applySort()
 				m.currentPage = 0
-				m.updateTableRows()
-				m.table.SetCursor(0)
+				return m, m.loadPage()
 			}
 			return m, nil
 		}
@@ -474,59 +505,39 @@ func (m *DataTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *DataTableModel) applyFilter() {
-	if m.searchQuery == "" {
-		m.filteredItems = make([]any, len(m.items))
-		copy(m.filteredItems, m.items)
-	} else {
-		m.filteredItems = nil
-		kw := strings.ToLower(m.searchQuery)
-		for _, item := range m.items {
-			if m.formatter.searchMatch(item, kw) {
-				m.filteredItems = append(m.filteredItems, item)
-			}
-		}
-	}
-	m.currentPage = 0
-	m.applySort()
-	m.updateTableRows()
-	m.table.SetCursor(0)
-	m.table.GotoTop()
-}
-
 func (m *DataTableModel) updateTableRows() {
-	start := m.currentPage * m.pageSize
-	end := start + m.pageSize
-	if start > len(m.filteredItems) {
-		start = len(m.filteredItems)
-	}
-	if end > len(m.filteredItems) {
-		end = len(m.filteredItems)
-	}
-	if start > end {
-		start = end
-	}
-
-	rows := make([]table.Row, end-start)
-	for i, item := range m.filteredItems[start:end] {
+	rows := make([]table.Row, len(m.filteredItems))
+	for i, item := range m.filteredItems {
 		k := m.formatter.getKey(item)
 		rows[i] = m.formatter.getRow(item, m.selected[k])
 	}
 	m.table.SetRows(rows)
 }
 
-func (m *DataTableModel) updateTableSize() {
+func (m *DataTableModel) updateTableSize() bool {
+	oldPageSize := m.pageSize
+	oldOffset := 0
+	if oldPageSize > 0 {
+		oldOffset = m.currentPage * oldPageSize
+	}
+
 	widths := m.formatter.calcWidths(m.width)
 	cols := m.formatter.columns(widths)
 	m.table.SetColumns(cols)
 
-	fixed := 2 // title + status (header is inside table height)
-	if m.searching {
-		fixed++
+	chrome := []string{
+		m.renderTitleBar(),
+		m.renderStatusBar(),
+		m.help.View(m.keys),
 	}
-	helpLines := strings.Count(m.help.View(m.keys), "\n") + 1
-	fixed += helpLines
-	fixed += 2 // lipgloss border around table (top + bottom)
+	if m.searching {
+		chrome = append(chrome, SearchBarStyle.Width(m.width).Render(m.searchInput.View()))
+	}
+
+	fixed := 2 // top and bottom border around the table
+	for _, section := range chrome {
+		fixed += lipgloss.Height(section)
+	}
 
 	h := m.height - fixed
 	if h < 3 {
@@ -535,24 +546,21 @@ func (m *DataTableModel) updateTableSize() {
 	m.table.SetHeight(h)
 	m.table.SetWidth(m.width - 2)
 
-	newPageSize := h - 1 // -1 for header row
-	if newPageSize < 5 {
-		newPageSize = 5
+	// table.Height is the viewport height after the table header has been
+	// deducted, so it is exactly the number of data rows visible on screen.
+	m.pageSize = max(1, m.table.Height())
+	if m.pageSize == oldPageSize {
+		return false
 	}
-	if newPageSize != m.pageSize {
-		m.pageSize = newPageSize
-		if m.currentPage >= m.pageCount() {
-			m.currentPage = m.pageCount() - 1
-		}
-		m.updateTableRows()
-	}
+	m.currentPage = oldOffset / m.pageSize
+	return true
 }
 
 func (m *DataTableModel) cursorItemIndex() int {
 	if len(m.filteredItems) == 0 {
 		return -1
 	}
-	idx := m.currentPage*m.pageSize + m.table.Cursor()
+	idx := m.table.Cursor()
 	if idx < 0 || idx >= len(m.filteredItems) {
 		return -1
 	}
@@ -568,17 +576,16 @@ func (m *DataTableModel) getKeyAtCursor() string {
 }
 
 func (m *DataTableModel) pageCount() int {
-	if len(m.filteredItems) == 0 {
+	if m.totalCount == 0 || m.pageSize <= 0 {
 		return 1
 	}
-	return (len(m.filteredItems)-1)/m.pageSize + 1
+	return (m.totalCount-1)/m.pageSize + 1
 }
 
 func (m *DataTableModel) prevPage() (tea.Model, tea.Cmd) {
 	if m.currentPage > 0 {
 		m.currentPage--
-		m.updateTableRows()
-		m.table.SetCursor(0)
+		return m, m.loadPage()
 	}
 	return m, nil
 }
@@ -587,8 +594,7 @@ func (m *DataTableModel) nextPage() (tea.Model, tea.Cmd) {
 	totalPages := m.pageCount()
 	if m.currentPage < totalPages-1 {
 		m.currentPage++
-		m.updateTableRows()
-		m.table.SetCursor(0)
+		return m, m.loadPage()
 	}
 	return m, nil
 }
@@ -603,8 +609,8 @@ func (m *DataTableModel) moveUp() (tea.Model, tea.Cmd) {
 	}
 	if m.currentPage > 0 {
 		m.currentPage--
-		m.updateTableRows()
-		m.table.SetCursor(len(m.table.Rows()) - 1)
+		m.cursorBottomAfterLoad = true
+		return m, m.loadPage()
 	}
 	return m, nil
 }
@@ -620,23 +626,9 @@ func (m *DataTableModel) moveDown() (tea.Model, tea.Cmd) {
 	totalPages := m.pageCount()
 	if m.currentPage < totalPages-1 {
 		m.currentPage++
-		m.updateTableRows()
-		m.table.SetCursor(0)
+		return m, m.loadPage()
 	}
 	return m, nil
-}
-
-func (m *DataTableModel) applySort() {
-	if m.sortCol < 0 || m.sortCol >= len(m.formatter.sortColumns) {
-		return
-	}
-	col := m.formatter.sortColumns[m.sortCol]
-	sort.SliceStable(m.filteredItems, func(i, j int) bool {
-		if m.sortAsc {
-			return col.less(m.filteredItems[i], m.filteredItems[j])
-		}
-		return col.less(m.filteredItems[j], m.filteredItems[i])
-	})
 }
 
 func (m *DataTableModel) applySortBy(colIdx int) (tea.Model, tea.Cmd) {
@@ -649,11 +641,8 @@ func (m *DataTableModel) applySortBy(colIdx int) (tea.Model, tea.Cmd) {
 		m.sortCol = colIdx
 		m.sortAsc = true
 	}
-	m.applySort()
 	m.currentPage = 0
-	m.updateTableRows()
-	m.table.SetCursor(0)
-	return m, nil
+	return m, m.loadPage()
 }
 
 func (m *DataTableModel) doDelete(key string) tea.Cmd {
@@ -807,12 +796,7 @@ func (m *DataTableModel) View() string {
 
 func (m *DataTableModel) renderTitleBar() string {
 	icon := m.formatter.title
-	count := len(m.filteredItems)
-	total := len(m.items)
-	label := fmt.Sprintf("%s  \xe2\x80\x94  %d items", icon, count)
-	if total != count {
-		label = fmt.Sprintf("%s  \xe2\x80\x94  %d / %d items", icon, count, total)
-	}
+	label := fmt.Sprintf("%s  \xe2\x80\x94  %d items", icon, m.totalCount)
 	if m.searching {
 		label += "  " + SearchActiveStyle.Render(fmt.Sprintf("[Search: %s]", m.searchInput.Value()))
 	}
@@ -821,21 +805,17 @@ func (m *DataTableModel) renderTitleBar() string {
 }
 
 func (m *DataTableModel) renderStatusBar() string {
-	total := len(m.filteredItems)
 	selectedInfo := fmt.Sprintf("%d selected", len(m.selected))
 
 	var parts []string
 	cursorIdx := m.cursorItemIndex()
 	if cursorIdx >= 0 {
-		itemLabel := fmt.Sprintf("%d/%d", cursorIdx+1, total)
-		if m.totalCount > 0 && total != m.totalCount {
-			itemLabel += fmt.Sprintf(" of %d", m.totalCount)
-		}
+		itemLabel := fmt.Sprintf("%d/%d", m.currentPage*m.pageSize+cursorIdx+1, m.totalCount)
 		parts = append(parts, itemLabel+" item")
 	} else {
 		parts = append(parts, "0/0 item")
 	}
-	if total > m.pageSize {
+	if m.totalCount > m.pageSize {
 		parts = append(parts, fmt.Sprintf("Page %d/%d", m.currentPage+1, m.pageCount()))
 	}
 	parts = append(parts, selectedInfo)
@@ -909,6 +889,7 @@ func (m *DataTableModel) buildPreviewContent() string {
 		title = r.Keyword
 		contentLines = []string{
 			wrap("ID", fmt.Sprintf("%d", r.ID)),
+			wrap("Status", factStatusDisplay(r)),
 			wrap("Keyword", r.Keyword),
 			wrap("Description", r.Description),
 			wrap("Entities", factEntitiesDisplay(r)),
@@ -1112,16 +1093,17 @@ func getFormatter(rt ResourceType) tableFormatter {
 	case ResourceFacts:
 		return tableFormatter{
 			title:     "Memory (Facts)",
-			minWidths: []int{5, 12, 15, 10, 10, 6},
+			minWidths: []int{5, 8, 12, 15, 10, 10, 6},
 			columns: func(widths []int) []table.Column {
 				return []table.Column{
 					{Title: "", Width: widths[0]},
 					{Title: "ID", Width: widths[1]},
-					{Title: "Keyword", Width: widths[2]},
-					{Title: "Description", Width: widths[3]},
-					{Title: "Entities", Width: widths[4]},
-					{Title: "Subjects", Width: widths[5]},
-					{Title: "Scope", Width: widths[6]},
+					{Title: "Status", Width: widths[2]},
+					{Title: "Keyword", Width: widths[3]},
+					{Title: "Description", Width: widths[4]},
+					{Title: "Entities", Width: widths[5]},
+					{Title: "Subjects", Width: widths[6]},
+					{Title: "Scope", Width: widths[7]},
 				}
 			},
 			getRow: func(a any, selected bool) table.Row {
@@ -1133,6 +1115,7 @@ func getFormatter(rt ResourceType) tableFormatter {
 				return table.Row{
 					cb,
 					fmt.Sprintf("%d", r.ID),
+					factStatusDisplay(r),
 					r.Keyword,
 					r.Description,
 					factEntitiesDisplay(r),
@@ -1145,6 +1128,7 @@ func getFormatter(rt ResourceType) tableFormatter {
 			searchMatch: func(a any, kw string) bool {
 				r := a.(api.FactRecord)
 				return strings.Contains(strings.ToLower(r.Keyword), kw) ||
+					strings.Contains(strings.ToLower(factStatusDisplay(r)), kw) ||
 					strings.Contains(strings.ToLower(r.Description), kw) ||
 					strings.Contains(strings.ToLower(factEntitiesDisplay(r)), kw) ||
 					strings.Contains(strings.ToLower(r.Subjects), kw) ||
@@ -1155,6 +1139,9 @@ func getFormatter(rt ResourceType) tableFormatter {
 			canDelete: true,
 			sortColumns: []sortColumn{
 				{name: "ID", less: func(a, b any) bool { return a.(api.FactRecord).ID < b.(api.FactRecord).ID }},
+				{name: "Status", less: func(a, b any) bool {
+					return !a.(api.FactRecord).Valid && b.(api.FactRecord).Valid
+				}},
 				{name: "Keyword", less: func(a, b any) bool {
 					return strings.Compare(a.(api.FactRecord).Keyword, b.(api.FactRecord).Keyword) < 0
 				}},
@@ -1633,52 +1620,58 @@ func toAnySlice[T any](items []T) []any {
 	return out
 }
 
-func loadResourceData(rt ResourceType, api *api.Client, botID, groupID string) ([]any, int, error) {
+func loadResourceData(
+	rt ResourceType,
+	api *api.Client,
+	botID string,
+	groupID string,
+	options api.ListOptions,
+) ([]any, int, error) {
 	switch rt {
 	case ResourceFacts:
-		resp, err := api.GetFacts(botID, groupID)
+		resp, err := api.GetFacts(botID, groupID, options)
 		if err != nil {
 			return nil, 0, err
 		}
 		return toAnySlice(resp.Items), resp.Total, nil
 	case ResourceProfiles:
-		resp, err := api.GetUserProfiles(botID, groupID)
+		resp, err := api.GetUserProfiles(botID, groupID, options)
 		if err != nil {
 			return nil, 0, err
 		}
 		return toAnySlice(resp.Items), resp.Total, nil
 	case ResourceMemes:
-		resp, err := api.GetMemes(botID, groupID)
+		resp, err := api.GetMemes(botID, groupID, options)
 		if err != nil {
 			return nil, 0, err
 		}
 		return toAnySlice(resp.Items), resp.Total, nil
 	case ResourceVocabularies:
-		resp, err := api.GetVocabularies(botID, groupID)
+		resp, err := api.GetVocabularies(botID, groupID, options)
 		if err != nil {
 			return nil, 0, err
 		}
 		return toAnySlice(resp.Items), resp.Total, nil
 	case ResourceSummaries:
-		resp, err := api.GetSummaries(botID, groupID)
+		resp, err := api.GetSummaries(botID, groupID, options)
 		if err != nil {
 			return nil, 0, err
 		}
 		return toAnySlice(resp.Items), resp.Total, nil
 	case ResourceHistory:
-		resp, err := api.GetHistory(botID, groupID)
+		resp, err := api.GetHistory(botID, groupID, options)
 		if err != nil {
 			return nil, 0, err
 		}
 		return toAnySlice(resp.Items), resp.Total, nil
 	case ResourceResource:
-		resp, err := api.GetResources(botID, groupID)
+		resp, err := api.GetResources(botID, groupID, options)
 		if err != nil {
 			return nil, 0, err
 		}
 		return toAnySlice(resp.Items), resp.Total, nil
 	case ResourceCronTasks:
-		resp, err := api.GetCronTasks(botID, groupID)
+		resp, err := api.GetCronTasks(botID, groupID, options)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -1699,6 +1692,13 @@ func factEntitiesDisplay(r api.FactRecord) string {
 		return strings.Join(r.Entities, ", ")
 	}
 	return r.Values
+}
+
+func factStatusDisplay(r api.FactRecord) string {
+	if r.Valid {
+		return "Valid"
+	}
+	return "Invalid"
 }
 
 func formatUnixTime(ts int64) string {

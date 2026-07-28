@@ -9,19 +9,214 @@ import ai.koog.prompt.message.Message
 import ai.koog.prompt.streaming.StreamFrame
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import uesugi.config.migration
 import uesugi.config.migrationIf
+import uesugi.core.manage.ManageListQuery
+import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.ExperimentalTime
 
 class MemoryGraphAndMigrationTest {
+    @Test
+    fun `conflict candidates are limited to the same subject scope and keyword`() {
+        createFactsDatabase()
+        val repository = MemoryRepository()
+        val matching = repository.createFact(
+            "bot-a", "group-a", "居住地", "用户现在住在杭州", listOf("杭州"), "user-a", Scopes.USER
+        )
+        repository.createFact(
+            "bot-a", "group-a", "居住地", "另一个用户住在上海", listOf("上海"), "user-b", Scopes.USER
+        )
+        repository.createFact(
+            "bot-a", "group-a", "工作", "用户在某公司工作", emptyList(), "user-a", Scopes.USER
+        )
+        repository.createFact(
+            "bot-a", "group-a", "居住地", "群体所在地", emptyList(), "", Scopes.GROUP
+        )
+        val existing = repository.getValidFacts("bot-a", "group-a")
+
+        val candidates = selectConflictCandidates(
+            listOf(
+                ExtractedFact(
+                    keyword = "居住地",
+                    description = "用户已经搬到重庆",
+                    entities = listOf("重庆"),
+                    subjects = "user-a",
+                    scope = Scopes.USER
+                )
+            ),
+            existing
+        )
+
+        assertEquals(listOf(matching), candidates.map { it.id })
+        assertFalse(isDeleteBackedBySuccessfulAdd(candidates.single(), emptyList()))
+        assertTrue(
+            isDeleteBackedBySuccessfulAdd(
+                candidates.single(),
+                listOf(
+                    ExtractedFact(
+                        keyword = "居住地",
+                        description = "用户已经搬到重庆",
+                        entities = listOf("重庆"),
+                        subjects = "user-a",
+                        scope = Scopes.USER
+                    )
+                )
+            )
+        )
+    }
+
+    @OptIn(ExperimentalTime::class)
+    @Test
+    fun `expired fact cleanup keeps recently deprecated facts for retention window`() {
+        createFactsDatabase()
+        val repository = MemoryRepository()
+        val oldId = repository.createFact(
+            "bot-a", "group-a", "old", "old fact", emptyList(), "user-a", Scopes.USER
+        )
+        val recentId = repository.createFact(
+            "bot-a", "group-a", "recent", "recent fact", emptyList(), "user-a", Scopes.USER
+        )
+        val now = Clock.System.now()
+        val timeZone = TimeZone.currentSystemDefault()
+        transaction {
+            FactsTable.update({ FactsTable.id eq oldId }) {
+                it[FactsTable.validTo] = (now - 31.days).toLocalDateTime(timeZone)
+            }
+            FactsTable.update({ FactsTable.id eq recentId }) {
+                it[FactsTable.validTo] = (now - 1.days).toLocalDateTime(timeZone)
+            }
+        }
+
+        val deleted = repository.deleteExpiredFacts((now - 30.days).toLocalDateTime(timeZone))
+
+        assertEquals(listOf(oldId), deleted.map { it.id })
+        assertEquals(null, repository.getFactById(oldId))
+        assertTrue(repository.getFactById(recentId) != null)
+    }
+
+    @Test
+    fun `status fact size counts only valid facts while management lists all facts`() {
+        createFactsDatabase()
+        val repository = MemoryRepository()
+        val activeId = repository.createFact(
+            "bot-a", "group-a", "active", "active fact", listOf("杭州"), "user-a", Scopes.USER
+        )
+        val invalidId = repository.createFact(
+            "bot-a", "group-a", "invalid", "invalid fact", listOf("上海"), "user-a", Scopes.USER
+        )
+        repository.deprecateFactsById("bot-a", "group-a", invalidId, Scopes.USER)
+        repository.createFact(
+            "bot-a", "group-b", "other", "other group fact", emptyList(), "user-a", Scopes.USER
+        )
+        val vectorStore = RecordingVectorStoreFactory()
+        val graphStore = RecordingGraphStoreFactory()
+        val service = MemoryService(
+            memoryAgent = MemoryAgent(repository, vectorStore, graphStore, FailingPromptExecutor()),
+            memoryRepository = repository,
+            factVectorStoreFactory = vectorStore,
+            factGraphStoreFactory = graphStore
+        )
+
+        assertEquals(1L, service.getFactSize("bot-a", "group-a"))
+        assertEquals(listOf(activeId), service.getAllFactsByGroup("bot-a", "group-a").first.map { it.id.value })
+
+        val (allFacts, total) = service.getAllFactsByGroupForManagement("bot-a", "group-a")
+        assertEquals(2, total)
+        assertEquals(setOf(activeId, invalidId), allFacts.map { it.id.value }.toSet())
+        assertEquals(
+            mapOf(activeId to true, invalidId to false),
+            allFacts.associate { it.id.value to it.toRecord().valid }
+        )
+
+        val (invalidFacts, invalidTotal) = service.getAllFactsByGroupForManagement(
+            "bot-a",
+            "group-a",
+            ManageListQuery(search = "invalid")
+        )
+        assertEquals(1, invalidTotal)
+        assertEquals(listOf(invalidId), invalidFacts.map { it.id.value })
+
+        val (matchingFacts, matchingTotal) = service.getAllFactsByGroupForManagement(
+            "bot-a",
+            "group-a",
+            ManageListQuery(search = "active fact")
+        )
+        assertEquals(1, matchingTotal)
+        assertEquals(listOf(activeId), matchingFacts.map { it.id.value })
+
+        val (sortedByValidity, _) = service.getAllFactsByGroupForManagement(
+            "bot-a",
+            "group-a",
+            ManageListQuery(sortBy = "valid", ascending = true)
+        )
+        assertEquals(listOf(invalidId, activeId), sortedByValidity.map { it.id.value })
+    }
+
+    @Test
+    fun `management fact paging is applied after newest-first ordering`() {
+        createFactsDatabase()
+        val repository = MemoryRepository()
+        repository.createFact("bot-a", "group-a", "first", "first fact", emptyList(), "user-a", Scopes.USER)
+        val secondId = repository.createFact(
+            "bot-a", "group-a", "second", "second fact", emptyList(), "user-a", Scopes.USER
+        )
+        val vectorStore = RecordingVectorStoreFactory()
+        val graphStore = RecordingGraphStoreFactory()
+        val service = MemoryService(
+            memoryAgent = MemoryAgent(repository, vectorStore, graphStore, FailingPromptExecutor()),
+            memoryRepository = repository,
+            factVectorStoreFactory = vectorStore,
+            factGraphStoreFactory = graphStore
+        )
+
+        val (page, total) = service.getAllFactsByGroupForManagement(
+            "bot-a",
+            "group-a",
+            ManageListQuery(offset = 1, limit = 1, sortBy = "id", ascending = true)
+        )
+
+        assertEquals(2, total)
+        assertEquals(listOf(secondId), page.map { it.id.value })
+    }
+
+    @Test
+    fun `orphan store cleanup keeps active directories and removes inactive directories`() {
+        val root = Files.createTempDirectory("erii-store-cleanup-test")
+        try {
+            Files.createDirectories(root.resolve("active"))
+            Files.createDirectories(root.resolve("orphan"))
+            Files.writeString(root.resolve("orphan").resolve("data"), "stale")
+            Files.writeString(root.resolve("not-a-store"), "keep")
+            val closed = mutableListOf<String>()
+
+            val removed = removeOrphanStoreDirectories(root, setOf("active"), closed::add)
+
+            assertEquals(listOf("orphan"), removed)
+            assertEquals(listOf("orphan"), closed)
+            assertTrue(Files.isDirectory(root.resolve("active")))
+            assertTrue(Files.exists(root.resolve("not-a-store")))
+            assertTrue(Files.notExists(root.resolve("orphan")))
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `migration adds entities column with empty list default`() {
         val database = createLegacyFactsDatabase()
@@ -349,6 +544,10 @@ class MemoryGraphAndMigrationTest {
             ),
             vectorStore.rebuilt
         )
+        assertEquals(
+            listOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"),
+            vectorStore.activeGroups.map { (botMark, groupId) -> "$botMark:$groupId" }
+        )
         assertEquals("fact_bot-a_group-b_$second", repository.getFactById(second)!!.vectorId)
     }
 
@@ -389,6 +588,10 @@ class MemoryGraphAndMigrationTest {
         assertEquals(2, result.facts)
         assertEquals(setOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"), result.groups.toSet())
         assertEquals(listOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"), graphStore.rebuilt)
+        assertEquals(
+            listOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"),
+            graphStore.activeGroups.map { (botMark, groupId) -> "$botMark:$groupId" }
+        )
     }
 
     @Test
@@ -396,26 +599,31 @@ class MemoryGraphAndMigrationTest {
         val defaults = MemoryRebuildOptions.from(emptyMap()) { null }
         val envOnly = MemoryRebuildOptions.from(
             mapOf(
+                "MEMORY_REBUILD_ENTITIES" to "yes",
                 "MEMORY_REBUILD_VECTOR" to "true",
                 "MEMORY_REBUILD_GRAPH" to "1"
             )
         ) { null }
         val propertyOverridesEnv = MemoryRebuildOptions.from(
             mapOf(
+                "MEMORY_REBUILD_ENTITIES" to "true",
                 "MEMORY_REBUILD_VECTOR" to "true",
                 "MEMORY_REBUILD_GRAPH" to "true"
             )
         ) { key ->
             when (key) {
+                "memory.rebuild.entities" -> "off"
                 "memory.rebuild.vector" -> "false"
                 "memory.rebuild.graph" -> "0"
                 else -> null
             }
         }
+        val rebuildAll = MemoryRebuildOptions.from(mapOf("MEMORY_REBUILD" to "on")) { null }
 
         assertEquals(MemoryRebuildOptions(), defaults)
-        assertEquals(MemoryRebuildOptions(vector = true, graph = true), envOnly)
-        assertEquals(MemoryRebuildOptions(vector = false, graph = false), propertyOverridesEnv)
+        assertEquals(MemoryRebuildOptions(entities = true, vector = true, graph = true), envOnly)
+        assertEquals(MemoryRebuildOptions(entities = false, vector = false, graph = false), propertyOverridesEnv)
+        assertEquals(MemoryRebuildOptions(entities = true, vector = true, graph = true), rebuildAll)
     }
 
     @Test
@@ -442,7 +650,22 @@ class MemoryGraphAndMigrationTest {
     }
 
     @Test
-    fun `fact entity rebuild dry run only analyzes empty valid facts without updating`() = runBlocking {
+    fun `entity rebuild also refreshes dependent vector and graph stores`() = runBlocking {
+        val events = mutableListOf<String>()
+
+        runConfiguredMemoryRebuilds(
+            options = MemoryRebuildOptions(entities = true),
+            rebuildEntities = { events += "entities" },
+            rebuildVector = { events += "vector" },
+            rebuildGraph = { events += "graph" },
+            logFailure = { _, error -> throw error }
+        )
+
+        assertEquals(listOf("entities", "vector", "graph"), events)
+    }
+
+    @Test
+    fun `fact entity rebuild only analyzes empty valid facts`() = runBlocking {
         createFactsDatabase()
         val repository = MemoryRepository()
         val emptyValid = repository.createFact("bot-a", "group-a", "move", "user moved from 杭州 to 重庆", emptyList(), "user-a", Scopes.USER)
@@ -456,10 +679,10 @@ class MemoryGraphAndMigrationTest {
             }
         }
 
-        val report = runner.run(FactEntityRebuildOptions(dryRun = true))
+        val report = runner.run()
 
-        assertEquals(FactEntityRebuildSummary(scanned = 1, updated = 0, unchanged = 1, failed = 0), report.summary)
-        assertEquals(emptyList(), repository.getFactById(emptyValid)!!.entities)
+        assertEquals(FactEntityRebuildSummary(scanned = 1, updated = 1, unchanged = 0, failed = 0), report.summary)
+        assertEquals(listOf("杭州", "重庆"), repository.getFactById(emptyValid)!!.entities)
         assertEquals(listOf("杭州", "重庆"), report.items.single().after)
     }
 
@@ -472,7 +695,7 @@ class MemoryGraphAndMigrationTest {
             listOf(" 杭州 ", "重庆", "杭州", "")
         }
 
-        val report = runner.run(FactEntityRebuildOptions())
+        val report = runner.run()
 
         assertEquals(FactEntityRebuildSummary(scanned = 1, updated = 1, unchanged = 0, failed = 0), report.summary)
         assertEquals(listOf("杭州", "重庆"), repository.getFactById(factId)!!.entities)
@@ -480,22 +703,16 @@ class MemoryGraphAndMigrationTest {
     }
 
     @Test
-    fun `fact entity rebuild option parser supports filters`() {
-        val options = parseFactEntityRebuildOptions(
-            arrayOf("--dry-run", "--all", "--include-invalid", "--bot", "bot-a", "--group", "group-a", "--limit", "5")
-        )
+    fun `entity candidates use lucene tokenization and stop words`() {
+        val candidates = extractEntityCandidates("the user moved from 杭州 to 重庆 and the user stayed in 杭州")
 
-        assertEquals(
-            FactEntityRebuildOptions(
-                dryRun = true,
-                onlyEmpty = false,
-                includeInvalid = true,
-                botMark = "bot-a",
-                groupId = "group-a",
-                limit = 5
-            ),
-            options
-        )
+        assertTrue("杭州" in candidates)
+        assertTrue("重庆" in candidates)
+        assertFalse("the" in candidates)
+        assertFalse("and" in candidates)
+        assertFalse("to" in candidates)
+        assertEquals(candidates.distinct(), candidates)
+        assertTrue(candidates.size <= 16)
     }
 
     @Test
@@ -615,6 +832,7 @@ class MemoryGraphAndMigrationTest {
         val indexed = mutableListOf<Int>()
         val deleted = mutableListOf<String>()
         val rebuilt = linkedMapOf<String, List<Int>>()
+        var activeGroups: List<Pair<String, String>> = emptyList()
         val searchTopKs = mutableListOf<Int>()
         val keywordTopKs = mutableListOf<Int>()
 
@@ -650,6 +868,11 @@ class MemoryGraphAndMigrationTest {
             return facts.map { it.id to generateVectorId(it.botMark, it.groupId, it.id) }
         }
 
+        override fun removeOrphanStores(activeGroups: List<Pair<String, String>>): List<String> {
+            this.activeGroups = activeGroups
+            return emptyList()
+        }
+
         override suspend fun indexFact(fact: FactsRecord): String {
             if (failIndex) {
                 error("expected vector indexing failure")
@@ -670,9 +893,15 @@ class MemoryGraphAndMigrationTest {
         val added = mutableListOf<Int>()
         val removed = mutableListOf<Int>()
         val rebuilt = mutableListOf<String>()
+        var activeGroups: List<Pair<String, String>> = emptyList()
 
         override fun rebuildStore(botMark: String, groupId: String) {
             rebuilt.add("$botMark:$groupId")
+        }
+
+        override fun removeOrphanStores(activeGroups: List<Pair<String, String>>): List<String> {
+            this.activeGroups = activeGroups
+            return emptyList()
         }
 
         override fun addFactEntities(fact: FactsRecord) {

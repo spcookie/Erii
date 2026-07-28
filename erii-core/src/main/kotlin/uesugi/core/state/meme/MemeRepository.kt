@@ -13,6 +13,7 @@ import uesugi.common.data.MessageType
 import uesugi.common.data.ResourceTable
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.common.toolkit.logger
+import uesugi.core.manage.ManageListQuery
 import uesugi.core.state.meme.MemeData.MemeEntity
 import uesugi.core.state.meme.MemeData.MemeRecord
 import uesugi.core.state.meme.MemeData.MemeScanStateEntity
@@ -201,20 +202,44 @@ class MemeRepository {
      * @param groupId 群组ID
      * @return 表情包记录列表
      */
-    fun getAllMemos(botId: String, groupId: String, offset: Int = 0, limit: Int = 0): Pair<List<MemeRecord>, Int> {
+    fun getAllMemos(
+        botId: String,
+        groupId: String,
+        offset: Int = 0,
+        limit: Int = 0
+    ): Pair<List<MemeRecord>, Int> = getAllMemos(
+        botId,
+        groupId,
+        ManageListQuery(offset = offset, limit = limit)
+    )
+
+    fun getAllMemos(botId: String, groupId: String, listQuery: ManageListQuery): Pair<List<MemeRecord>, Int> {
         return transaction {
-            val condition =
+            var condition: Op<Boolean> =
                 (MemeTable.botMark eq botId) and (MemeTable.groupId eq groupId)
-            val baseQuery = MemeEntity.find { condition }
-            val total = baseQuery.count().toInt()
+            if (listQuery.search.isNotBlank()) {
+                condition = condition and (
+                        (MemeTable.md5.lowerCase() like listQuery.searchPattern) or
+                                (MemeTable.description.lowerCase() like listQuery.searchPattern) or
+                                (MemeTable.purpose.lowerCase() like listQuery.searchPattern) or
+                                (MemeTable.tags.lowerCase() like listQuery.searchPattern)
+                        )
+            }
+            val total = MemeEntity.find { condition }.count().toInt()
             val query = MemeTable
                 .selectAll()
                 .where { condition }
-                .orderBy(MemeTable.createdAt to SortOrder.DESC)
-            val pageQuery = if (limit > 0) {
-                query.limit(limit).offset(offset.toLong())
+            when (listQuery.sortBy) {
+                "id" -> query.orderBy(MemeTable.id to listQuery.sortOrder)
+                "description" -> query.orderBy(MemeTable.description to listQuery.sortOrder, MemeTable.id to listQuery.sortOrder)
+                "seenCount" -> query.orderBy(MemeTable.seenCount to listQuery.sortOrder, MemeTable.id to listQuery.sortOrder)
+                "usageCount" -> query.orderBy(MemeTable.usageCount to listQuery.sortOrder, MemeTable.id to listQuery.sortOrder)
+                else -> query.orderBy(MemeTable.createdAt to SortOrder.DESC, MemeTable.id to SortOrder.DESC)
+            }
+            val pageQuery = if (listQuery.limit > 0) {
+                query.limit(listQuery.limit).offset(listQuery.offset.toLong())
             } else {
-                query.offset(offset.toLong())
+                query.offset(listQuery.offset.toLong())
             }
             val items = MemeEntity.wrapRows(pageQuery).map { it.toRecord() }
             items to total
@@ -274,6 +299,23 @@ class MemeRepository {
             }
             query.map { it.toRecord() }
         }
+    }
+
+    fun getAnalyzedMemesForRebuild(botId: String, groupId: String): List<MemeRecord> = transaction {
+        MemeEntity.find {
+            (MemeTable.botMark eq botId) and
+                    (MemeTable.groupId eq groupId) and
+                    (MemeTable.lastAnalyzedCount greater 0)
+        }
+            .map { it.toRecord() }
+    }
+
+    fun getAllMemeGroups(): List<Pair<String, String>> = transaction {
+        MemeTable
+            .select(MemeTable.botMark, MemeTable.groupId)
+            .withDistinct(true)
+            .map { it[MemeTable.botMark] to it[MemeTable.groupId] }
+            .sortedWith(compareBy<Pair<String, String>> { it.first }.thenBy { it.second })
     }
 
     @OptIn(ExperimentalTime::class)

@@ -59,6 +59,7 @@ type FactRecord struct {
 	ValidFrom   string   `json:"validFrom"`
 	ValidTo     *string  `json:"validTo"`
 	VectorID    *string  `json:"vectorId"`
+	Valid       bool     `json:"valid"`
 }
 
 type FactRequest struct {

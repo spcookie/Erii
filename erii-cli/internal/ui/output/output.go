@@ -22,6 +22,16 @@ var (
 	errorStyle   = lipgloss.NewStyle().Foreground(theme.Error).Bold(true)
 )
 
+const (
+	projectLogo = `  _____ ____  ___ ___
+ | ____|  _ \|_ _|_ _|
+ |  _| | |_) || | | |
+ | |___|  _ < | | | |
+ |_____|_| \_\___|___|`
+	projectURL         = "https://github.com/spcookie/erii"
+	projectDescription = "An AI group chat bot with emotions, memory, and personality."
+)
+
 func Title(value string) string   { return titleStyle.Render(value) }
 func Muted(value string) string   { return mutedStyle.Render(value) }
 func Section(value string) string { return sectionStyle.Render(value) }
@@ -29,6 +39,37 @@ func Plugin(value string) string  { return pluginStyle.Render(value) }
 func Success(value string) string { return successStyle.Render(value) }
 func Warning(value string) string { return warningStyle.Render(value) }
 func Error(value string) string   { return errorStyle.Render(value) }
+
+// HelpHeader renders the project identity shown above the root command help.
+func HelpHeader() string {
+	logoStyle := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
+	urlStyle := lipgloss.NewStyle().Foreground(theme.Accent)
+	descriptionStyle := lipgloss.NewStyle().Foreground(theme.TextBody)
+	logoLines := strings.Split(projectLogo, "\n")
+	details := []string{
+		"",
+		"",
+		"",
+		urlStyle.Render(projectURL),
+		descriptionStyle.Render(projectDescription),
+	}
+	logoWidth := 0
+	for _, line := range logoLines {
+		logoWidth = max(logoWidth, runewidth.StringWidth(line))
+	}
+
+	var header strings.Builder
+	for i, line := range logoLines {
+		header.WriteString(logoStyle.Render(line))
+		if details[i] != "" {
+			header.WriteString(strings.Repeat(" ", logoWidth-runewidth.StringWidth(line)+3))
+			header.WriteString(details[i])
+		}
+		header.WriteByte('\n')
+	}
+	header.WriteByte('\n')
+	return header.String()
+}
 
 func Row(label, value string) string {
 	return "  " + labelStyle.Render(label) + valueStyle.Render(value) + "\n"

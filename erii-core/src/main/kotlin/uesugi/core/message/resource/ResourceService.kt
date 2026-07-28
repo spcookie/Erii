@@ -1,10 +1,7 @@
 package uesugi.core.message.resource
 
 import kotlinx.datetime.LocalDateTime
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -13,6 +10,7 @@ import uesugi.common.data.ResourceEntity
 import uesugi.common.data.ResourceRecord
 import uesugi.common.data.ResourceTable
 import uesugi.common.data.toRecord
+import uesugi.core.manage.ManageListQuery
 
 class ResourceService {
 
@@ -41,20 +39,41 @@ class ResourceService {
         groupId: String,
         offset: Int = 0,
         limit: Int = 500
+    ): Pair<List<ResourceRecord>, Int> = getAllResourcesByGroup(
+        botMark,
+        groupId,
+        ManageListQuery(offset = offset, limit = limit)
+    )
+
+    fun getAllResourcesByGroup(
+        botMark: String,
+        groupId: String,
+        listQuery: ManageListQuery
     ): Pair<List<ResourceRecord>, Int> {
         return transaction {
-            val condition =
+            var condition: Op<Boolean> =
                 (ResourceTable.botMark eq botMark) and (ResourceTable.groupId eq groupId)
-            val baseQuery = ResourceEntity.find { condition }
-            val total = baseQuery.count().toInt()
+            if (listQuery.search.isNotBlank()) {
+                condition = condition and (
+                        (ResourceTable.fileName.lowerCase() like listQuery.searchPattern) or
+                                (ResourceTable.md5.lowerCase() like listQuery.searchPattern) or
+                                (ResourceTable.url.lowerCase() like listQuery.searchPattern)
+                        )
+            }
+            val total = ResourceEntity.find { condition }.count().toInt()
             val query = ResourceTable
                 .selectAll()
                 .where { condition }
-                .orderBy(ResourceTable.createdAt to SortOrder.DESC)
-            val pageQuery = if (limit > 0) {
-                query.limit(limit).offset(offset.toLong())
+            when (listQuery.sortBy) {
+                "id" -> query.orderBy(ResourceTable.id to listQuery.sortOrder)
+                "fileName" -> query.orderBy(ResourceTable.fileName to listQuery.sortOrder, ResourceTable.id to listQuery.sortOrder)
+                "size" -> query.orderBy(ResourceTable.size to listQuery.sortOrder, ResourceTable.id to listQuery.sortOrder)
+                else -> query.orderBy(ResourceTable.createdAt to SortOrder.DESC, ResourceTable.id to SortOrder.DESC)
+            }
+            val pageQuery = if (listQuery.limit > 0) {
+                query.limit(listQuery.limit).offset(listQuery.offset.toLong())
             } else {
-                query.offset(offset.toLong())
+                query.offset(listQuery.offset.toLong())
             }
             val items = ResourceEntity.wrapRows(pageQuery)
                 .map { it.toRecord() }

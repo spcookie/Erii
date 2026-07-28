@@ -24,6 +24,7 @@ interface GraphStore {
     fun removeFactEntities(factId: Int)
     fun expandByEntities(entityIds: List<String>): List<Int>
     fun expandByFacts(factIds: List<Int>): List<String>
+    fun close() = Unit
 }
 
 /**
@@ -166,6 +167,10 @@ class Rdf4jGraphStore(
             log.error("Reverse graph expansion failed for factIds=$factIds", e)
             return emptyList()
         }
+    }
+
+    override fun close() {
+        repo.shutDown()
     }
 
     // ── Private helpers ──
