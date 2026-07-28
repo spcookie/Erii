@@ -39,6 +39,7 @@ fun Application.configureRouting() {
     }
     routing {
         configureBotStatus()
+        configureBotInfoRoutes()
         configureBotStatusManager()
         configureBotConfigManager()
         configureChatRoutes()
