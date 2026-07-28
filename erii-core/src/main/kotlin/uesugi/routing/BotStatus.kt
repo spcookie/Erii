@@ -31,7 +31,7 @@ import uesugi.spi.RouteExtension
 /**
  * 构建 PluginStats
  */
-private fun buildPluginStats(botId: String? = null): BotStatus.PluginStats {
+internal fun buildPluginStats(botId: String? = null): BotStatus.PluginStats {
     if (botId == null) {
         val allExtensions = ExtensionRegister.getAllExtensions()
 
@@ -78,7 +78,7 @@ private fun buildPluginStats(botId: String? = null): BotStatus.PluginStats {
 /**
  * 构建单个群组的 ByGroup 状态
  */
-private fun buildGroupStatus(
+internal fun buildGroupStatus(
     botId: String,
     groupId: String,
     emoticon: EmotionalTendencies,
@@ -164,6 +164,62 @@ private fun buildGroupStatus(
         memeSize = memeSize,
         analyzedMemeSize = analyzedMemeSize,
         memes = memes
+    )
+}
+
+internal suspend fun buildGroupStatusResponse(
+    botId: String,
+    groupId: String,
+    emotionService: EmotionService,
+    flowGaugeManager: FlowGaugeManager,
+    volitionGaugeManager: VolitionGaugeManager,
+    evolutionService: EvolutionService,
+    memoryService: MemoryService,
+    memoService: MemeService,
+    historyService: HistoryService,
+): GroupStatusResponse? {
+    if (botId !in BotManage.getAllBotIds()) return null
+
+    val enabledGroups = ConfigHolder.getEffectiveEnableGroups(BotManage.getConfigKey(botId))
+    if (groupId !in enabledGroups) return null
+
+    val roledBot = BotManage.getBot(botId)
+    val groupName = roledBot.refBot.getGroupList()
+        .find { it.groupId.toString() == groupId }
+        ?.groupName
+        ?: groupId
+    val groupStatus = buildGroupStatus(
+        botId = botId,
+        groupId = groupId,
+        emoticon = roledBot.role.emoticon,
+        emotionService = emotionService,
+        flowGaugeManager = flowGaugeManager,
+        volitionGaugeManager = volitionGaugeManager,
+        evolutionService = evolutionService,
+        memoryService = memoryService,
+        memoService = memoService,
+    )
+
+    return GroupStatusResponse(
+        botId = botId,
+        botName = roledBot.role.name,
+        groupId = groupId,
+        groupName = groupName,
+        behaviorProfile = groupStatus.behaviorProfile,
+        pad = groupStatus.pad,
+        flowState = groupStatus.flowState,
+        volitionState = groupStatus.volitionState,
+        vocabularies = groupStatus.vocabularies,
+        summary = groupStatus.summary,
+        factSize = groupStatus.factSize,
+        userProfileSize = groupStatus.userProfileSize,
+        facts = groupStatus.facts,
+        userProfiles = groupStatus.userProfiles,
+        memeSize = groupStatus.memeSize,
+        analyzedMemeSize = groupStatus.analyzedMemeSize,
+        memes = groupStatus.memes,
+        pluginStats = buildPluginStats(botId),
+        hourlyMsgCounts = historyService.getHourlyMessageCounts(botId, groupId, 12),
     )
 }
 
@@ -259,52 +315,21 @@ fun Routing.configureBotStatus() {
                 return@get
             }
 
-            val roledBot = BotManage.getBot(botId)
-            val refBot = roledBot.refBot
-            val groupList = refBot.getGroupList()
-            val enabledGroups = ConfigHolder.getEffectiveEnableGroups(BotManage.getConfigKey(botId))
-
-            if (!enabledGroups.contains(groupId)) {
-                call.respond(mapOf("error" to "group not enabled for this bot"))
-                return@get
-            }
-
-            val groupName = groupList.find { it.groupId.toString() == groupId }?.groupName ?: groupId
-            val pluginStats = buildPluginStats(botId)
-            val groupStatus = buildGroupStatus(
+            val response = buildGroupStatusResponse(
                 botId = botId,
                 groupId = groupId,
-                emoticon = roledBot.role.emoticon,
                 emotionService = emotionService,
                 flowGaugeManager = flowGaugeManager,
                 volitionGaugeManager = volitionGaugeManager,
                 evolutionService = evolutionService,
                 memoryService = memoryService,
-                memoService = memoService
+                memoService = memoService,
+                historyService = historyService,
             )
-            val hourlyMsgCounts = historyService.getHourlyMessageCounts(botId, groupId, 12)
-
-            val response = GroupStatusResponse(
-                botId = botId,
-                botName = roledBot.role.name,
-                groupId = groupId,
-                groupName = groupName,
-                behaviorProfile = groupStatus.behaviorProfile,
-                pad = groupStatus.pad,
-                flowState = groupStatus.flowState,
-                volitionState = groupStatus.volitionState,
-                vocabularies = groupStatus.vocabularies,
-                summary = groupStatus.summary,
-                factSize = groupStatus.factSize,
-                userProfileSize = groupStatus.userProfileSize,
-                facts = groupStatus.facts,
-                userProfiles = groupStatus.userProfiles,
-                memeSize = groupStatus.memeSize,
-                analyzedMemeSize = groupStatus.analyzedMemeSize,
-                memes = groupStatus.memes,
-                pluginStats = pluginStats,
-                hourlyMsgCounts = hourlyMsgCounts
-            )
+            if (response == null) {
+                call.respond(mapOf("error" to "group not enabled for this bot"))
+                return@get
+            }
 
             call.respond(response)
         }

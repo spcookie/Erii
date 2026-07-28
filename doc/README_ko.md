@@ -10,7 +10,6 @@
 <br/>
 [![Ktor](https://img.shields.io/badge/Ktor-3.3+-087CFA?style=for-the-badge&logo=ktor&logoColor=white)](https://ktor.io/)
 [![Koog_Agents](https://img.shields.io/badge/Koog_Agents-0.7+-FF6B6B?style=for-the-badge)](https://github.com/spcookie/koog)
-[![Mirai](https://img.shields.io/badge/Mirai-2.16+-00C4B3?style=for-the-badge)](https://github.com/mamoe/mirai)
 [![JobRunr](https://img.shields.io/badge/JobRunr-8.3+-green?style=for-the-badge)](https://jobrunr.io/)
 <br/>
 [![H2](https://img.shields.io/badge/H2-2.3+-0066CC?style=for-the-badge)](https://www.h2database.com/)
@@ -106,17 +105,3 @@ go install ./erii-cli
 ## 📄 라이선스
 
 이 프로젝트는 [MIT](LICENSE) 라이선스로 오픈소스입니다.
-
-## Repobeats
-
-![Alt](https://repobeats.axiom.co/api/embed/341cfbaa0a0048c8c95abe32707d6760903d13e0.svg "Repobeats analytics image")
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=spcookie%2Ferii&type=date&logscale=&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=spcookie/erii&type=date&theme=dark&logscale&legend=top-left&sealed_token=qH79hCL-Kh4sv8moangZ4Rd6h9bVvzPLOZ6vx4gd4iaOX0KHVk6xDqkCHPU8M8mKegfxInengia-KNVIBR4K3wt6PSSWColTuqSFnMS_UyyZVmHqk-cUc_LhLqqFLwbpZwmBAXLrUR0edR5m0hPkpvrqYeTSbvDw-cW-5mPcS5qqAhLYTaMDLaaTTKq8" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=spcookie/erii&type=date&logscale&legend=top-left&sealed_token=qH79hCL-Kh4sv8moangZ4Rd6h9bVvzPLOZ6vx4gd4iaOX0KHVk6xDqkCHPU8M8mKegfxInengia-KNVIBR4K3wt6PSSWColTuqSFnMS_UyyZVmHqk-cUc_LhLqqFLwbpZwmBAXLrUR0edR5m0hPkpvrqYeTSbvDw-cW-5mPcS5qqAhLYTaMDLaaTTKq8" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=spcookie/erii&type=date&logscale&legend=top-left&sealed_token=qH79hCL-Kh4sv8moangZ4Rd6h9bVvzPLOZ6vx4gd4iaOX0KHVk6xDqkCHPU8M8mKegfxInengia-KNVIBR4K3wt6PSSWColTuqSFnMS_UyyZVmHqk-cUc_LhLqqFLwbpZwmBAXLrUR0edR5m0hPkpvrqYeTSbvDw-cW-5mPcS5qqAhLYTaMDLaaTTKq8" />
- </picture>
-</a>
