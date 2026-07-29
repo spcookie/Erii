@@ -16,6 +16,7 @@ import uesugi.core.bot.disconnectBots
 import uesugi.core.chat.configureChatBridge
 import uesugi.core.component.browser.BrowserScraperImpl
 import uesugi.core.mcp.McpManager
+import uesugi.core.route.RouteTriggerHandler
 import uesugi.server.*
 
 internal val LOG by lazy { logger("uesugi") }
@@ -32,6 +33,8 @@ fun Application.module() {
 
     ConfigHolder.init(ConfigHolderImpl())
     SystemConfigHolder.init(this)
+
+    RouteTriggerHandler.start()
 
     val browserScraperImpl = BrowserScraperImpl()
     BrowserScraperHolder.init(browserScraperImpl)

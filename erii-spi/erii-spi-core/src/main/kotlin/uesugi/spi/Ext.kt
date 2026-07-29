@@ -5,12 +5,16 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import uesugi.common.BotManage
+import uesugi.common.EventBus
 import uesugi.common.data.HistoryRecord
 import uesugi.common.data.HistoryTable
+import uesugi.common.event.route.CallRouteEvent
+import uesugi.common.route.CmdRouteRule
+import uesugi.common.route.LLMRouteRule
+import uesugi.common.route.RouteRule
 import uesugi.common.toolkit.ConfigHolder
 import kotlin.time.Clock
 import kotlin.time.Duration
-import kotlin.time.ExperimentalTime
 
 fun Meta.getRefBot() = roledBot.refBot
 
@@ -18,7 +22,53 @@ fun Meta.getAdmins() = ConfigHolder.getAdmins(BotManage.getConfigKey(botId), gro
 
 fun Meta.isAdmin() = senderId in getAdmins()
 
-@OptIn(ExperimentalTime::class)
+fun Meta.callLLMRoute(
+    target: String,
+    botId: String? = null,
+    groupId: String? = null,
+    senderId: String? = null,
+    input: String? = null
+) = callRoute(
+    this,
+    LLMRouteRule(target, "__ignore__"),
+    botId,
+    groupId,
+    senderId,
+    input
+)
+
+fun Meta.callCmdRoute(
+    target: String,
+    botId: String? = null,
+    groupId: String? = null,
+    senderId: String? = null,
+    input: String? = null
+) = callRoute(
+    this,
+    CmdRouteRule(target),
+    botId,
+    groupId,
+    senderId,
+    input
+)
+
+private fun callRoute(
+    meta: Meta,
+    target: RouteRule,
+    botId: String? = null,
+    groupId: String? = null,
+    senderId: String? = null,
+    input: String? = null
+) = EventBus.postAsync(
+    CallRouteEvent(
+        botId = botId ?: meta.botId,
+        groupId = groupId ?: meta.groupId,
+        senderId = senderId ?: meta.senderId ?: "",
+        input = input ?: meta.input ?: "",
+        hit = target
+    )
+)
+
 suspend fun Database.getLatestHistory(
     botId: String,
     groupId: String,
