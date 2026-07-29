@@ -235,7 +235,7 @@ object BotAgent {
         }
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class, InternalAgentsApi::class)
+    @OptIn(ExperimentalCoroutinesApi::class, InternalAgentsApi::class)
     private suspend fun processChannel(key: BotGroupKey, channel: Channel<ProactiveSpeakEvent?>) {
         for (event in channel) {
             if (event == null) continue
@@ -290,12 +290,12 @@ object BotAgent {
                             }
 
                             suspend fun onToolResultRelease(results: ReceivedToolResults) {
-                                for (result in results.toolResults) {
-                                    if (isChatTool(toolShortName(result.tool)) && result.resultKind is ToolResultKind.Failure) {
+                                for ((_, tool, _, _, _, resultKind) in results.toolResults) {
+                                    if (isChatTool(toolShortName(tool)) && resultKind is ToolResultKind.Failure) {
                                         chatRateLimiter.release()
                                         log.warn(
                                             "Bot Chat tool called failure, release limiter: tool={}, group={}",
-                                            toolShortName(result.tool), key.groupId
+                                            toolShortName(tool), key.groupId
                                         )
                                     }
                                 }
@@ -485,7 +485,6 @@ object BotAgent {
         return baseRegistry + mcpRegistry
     }
 
-    @OptIn(ExperimentalTime::class)
     private suspend fun agentRun(
         aiAgent: GraphAIAgentService<String, String>,
         context: Context,
