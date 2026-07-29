@@ -1,4 +1,4 @@
-package uesugi
+package uesugi.cli
 
 import com.github.ajalt.mordant.rendering.TextColors
 import com.github.ajalt.mordant.rendering.TextStyles

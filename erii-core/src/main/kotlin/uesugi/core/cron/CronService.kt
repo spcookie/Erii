@@ -10,10 +10,10 @@ import uesugi.common.message.CommandUtil
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.core.component.usage.UsageContext
 import uesugi.core.route.CmdRuleRegister
-import uesugi.core.route.RouteCallEvent
+import uesugi.core.route.RouteCalledEvent
 import uesugi.core.route.RoutingAgent
-import uesugi.onebot.sdk.client.api.sendGroupMsg
 import uesugi.onebot.core.message.buildMessage
+import uesugi.onebot.sdk.client.api.sendGroupMsg
 import uesugi.spi.Feature
 import uesugi.spi.sendAgent
 import kotlin.time.Duration.Companion.seconds
@@ -103,7 +103,7 @@ class CronService(private val jobScheduler: JobScheduler) {
                     RoutingAgent.route(task.botId, task.groupId, task.content)
                 }
                 EventBus.postAsync(
-                    RouteCallEvent(
+                    RouteCalledEvent(
                         botId = task.botId,
                         groupId = task.groupId,
                         senderId = task.senderId ?: "",
@@ -120,7 +120,7 @@ class CronService(private val jobScheduler: JobScheduler) {
                     val cmd = CmdRuleRegister.getRuleForBot(commandName, task.botId)
                     if (cmd != null) {
                         EventBus.postAsync(
-                            RouteCallEvent(
+                            RouteCalledEvent(
                                 botId = task.botId,
                                 groupId = task.groupId,
                                 senderId = task.senderId ?: "",

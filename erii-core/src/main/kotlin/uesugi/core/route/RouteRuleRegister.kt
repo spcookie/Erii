@@ -1,8 +1,8 @@
 package uesugi.core.route
 
 import uesugi.common.BotManage
-import uesugi.common.event.CmdRouteRule
-import uesugi.common.event.LLMRouteRule
+import uesugi.common.route.CmdRouteRule
+import uesugi.common.route.LLMRouteRule
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.spi.MetaToolSetCreator
 

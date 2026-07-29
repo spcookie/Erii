@@ -16,7 +16,7 @@ import uesugi.common.IntegrationEvent
 import uesugi.common.toolkit.logger
 import uesugi.core.component.usage.UsageContext
 import uesugi.core.route.MetaToolSetRegister
-import uesugi.core.route.RouteCallEvent
+import uesugi.core.route.RouteCalledEvent
 import uesugi.spi.*
 import uesugi.spi.annotation.withPluginContext
 import kotlin.time.Duration.Companion.milliseconds
@@ -84,7 +84,7 @@ class PluginContextImpl(
     }
 
     override fun start() {
-        job = EventBus.subscribeAsync<RouteCallEvent>(scope) { event ->
+        job = EventBus.subscribeAsync<RouteCalledEvent>(scope) { event ->
             scope.launch {
                 UsageContext.withUsage(event.botId, event.groupId) {
                     for (rk in defined.routeKeys) {

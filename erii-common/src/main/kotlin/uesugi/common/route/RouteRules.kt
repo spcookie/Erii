@@ -1,4 +1,4 @@
-package uesugi.common.event
+package uesugi.common.route
 
 interface RouteRule {
     val name: String
