@@ -7,5 +7,6 @@ annotation class Route(
     val key: String,
     val toolSets: Array<String> = ["default"],
     val onLoad: Array<String> = [],
-    val onUnload: Array<String> = []
+    val onUnload: Array<String> = [],
+    val description: String = "",
 )

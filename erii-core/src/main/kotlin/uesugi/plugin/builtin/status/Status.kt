@@ -21,6 +21,9 @@ class Status : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExtens
     override val name: String
         get() = "builtin_rendering"
 
+    override val description: String
+        get() = "查看当前群组的运行状态"
+
     override fun onLoad(context: PluginContext) {
         val browserScraper = BrowserScraperHolder.getInstance()
         val externalHost = ConfigHolder.getBrowserExternalHost()

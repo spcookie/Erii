@@ -1,0 +1,388 @@
+@import uesugi.plugin.PluginHelpCatalog
+
+@param catalog: PluginHelpCatalog
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Erii Help Directory</title>
+    <style>
+        :root {
+            --paper: #fafaf8;
+            --ink: #0a0a0a;
+            --grey-1: #f0f0ee;
+            --grey-2: #d4d4d2;
+            --grey-3: #737373;
+            --accent: #C5E803;
+            --accent-on: #0a0a0a;
+            --sans: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            --mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            background: var(--paper);
+            color: var(--ink);
+        }
+
+        body {
+            width: 1280px;
+            min-height: 720px;
+            font-family: var(--sans);
+            font-weight: 400;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+        }
+
+        .accent-line {
+            height: 8px;
+            background: var(--accent);
+        }
+
+        .page {
+            padding: 34px 52px 28px;
+        }
+
+        .chrome,
+        .eyebrow,
+        .stat-label,
+        .section-count,
+        .entry-index,
+        .aliases,
+        footer {
+            font-family: var(--mono);
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .chrome {
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--ink);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            background: var(--accent);
+        }
+
+        .edition {
+            color: var(--grey-3);
+        }
+
+        .hero {
+            padding: 34px 0 40px;
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 24px;
+            align-items: stretch;
+        }
+
+        .hero-copy {
+            grid-column: span 9;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .eyebrow {
+            color: var(--grey-3);
+        }
+
+        h1 {
+            margin: 20px 0 0;
+            font-size: 94px;
+            line-height: .88;
+            font-weight: 200;
+            letter-spacing: -.065em;
+        }
+
+        .intro {
+            margin: 28px 0 0;
+            font-size: 18px;
+            line-height: 1.45;
+            color: var(--grey-3);
+        }
+
+        .stat {
+            grid-column: span 3;
+            min-height: 202px;
+            padding: 22px 24px 20px;
+            background: var(--accent);
+            color: var(--accent-on);
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+        }
+
+        .stat-total {
+            align-self: center;
+            font-size: 90px;
+            line-height: .75;
+            font-weight: 200;
+            letter-spacing: -.07em;
+        }
+
+        .stat-detail {
+            padding-top: 13px;
+            border-top: 1px solid var(--accent-on);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            font-family: var(--mono);
+            font-size: 14px;
+            line-height: 1.35;
+        }
+
+        .stat-detail strong {
+            display: block;
+            font-family: var(--sans);
+            font-size: 24px;
+            line-height: 1;
+            font-weight: 400;
+        }
+
+        .directory + .directory {
+            margin-top: 34px;
+        }
+
+        .section-head {
+            min-height: 72px;
+            padding: 14px 0 16px;
+            border-top: 4px solid var(--ink);
+            border-bottom: 1px solid var(--ink);
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+        }
+
+        .routes .section-head {
+            border-top-color: var(--accent);
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 38px;
+            line-height: .95;
+            font-weight: 300;
+            letter-spacing: -.04em;
+        }
+
+        .section-count {
+            padding-bottom: 4px;
+            color: var(--grey-3);
+        }
+
+        .entry-grid {
+            display: grid;
+            gap: 0;
+        }
+
+        .command-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .route-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .entry {
+            min-width: 0;
+            min-height: 176px;
+            padding: 18px 20px 20px;
+            border-right: 1px solid var(--grey-2);
+            border-bottom: 1px solid var(--grey-2);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .command-grid .entry:nth-child(3n) {
+            border-right: 0;
+        }
+
+        .route-grid .entry:nth-child(2n) {
+            border-right: 0;
+        }
+
+        .entry-index {
+            color: var(--grey-3);
+        }
+
+        .entry-name {
+            margin-top: 22px;
+            font-family: var(--mono);
+            font-size: 24px;
+            line-height: 1.2;
+            font-weight: 500;
+            overflow-wrap: anywhere;
+        }
+
+        .command-mark {
+            color: var(--accent-on);
+        }
+
+        .route-mark {
+            color: var(--ink);
+        }
+
+        .entry-description {
+            margin: 16px 0 0;
+            font-size: 16px;
+            line-height: 1.45;
+            color: var(--grey-3);
+        }
+
+        .route-entry .entry-description:not(.empty) {
+            color: var(--ink);
+        }
+
+        .aliases {
+            margin-top: auto;
+            padding-top: 14px;
+            color: var(--grey-3);
+            line-height: 1.45;
+            letter-spacing: .02em;
+            text-transform: none;
+        }
+
+        .grid-fill {
+            min-height: 176px;
+            background: var(--grey-2);
+        }
+
+        .grid-fill.span-two {
+            grid-column: span 2;
+        }
+
+        .empty-state {
+            min-height: 120px;
+            padding: 28px 20px;
+            border-bottom: 1px solid var(--grey-2);
+            color: var(--grey-3);
+            font-size: 16px;
+        }
+
+        footer {
+            margin-top: 34px;
+            padding-top: 16px;
+            border-top: 1px solid var(--ink);
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+<div class="accent-line"></div>
+<div class="page">
+    <div class="chrome">
+        <div class="brand">ERII / EXTENSIONS</div>
+        <div class="edition">Directory · 2026</div>
+    </div>
+
+    <header class="hero">
+        <div class="hero-copy">
+            <div>
+                <div class="eyebrow">Available to this bot</div>
+                <h1>HELP DIRECTORY</h1>
+            </div>
+            <p class="intro">A concise index of installed commands and routes.</p>
+        </div>
+        <aside class="stat">
+            <span class="stat-label">Total entries</span>
+            <strong class="stat-total">${catalog.commands.size + catalog.routes.size}</strong>
+            <div class="stat-detail">
+                <span><strong>${catalog.commands.size}</strong>Commands</span>
+                <span><strong>${catalog.routes.size}</strong>Routes</span>
+            </div>
+        </aside>
+    </header>
+
+    <main>
+        <section class="directory commands">
+            <div class="section-head">
+                <h2>Commands</h2>
+                <span class="section-count">${catalog.commands.size.toString().padStart(2, '0')} entries</span>
+            </div>
+            @if(catalog.commands.isEmpty())
+                <div class="empty-state">No commands available.</div>
+            @else
+                <div class="entry-grid command-grid">
+                    @for(item in catalog.commands)
+                        <article class="entry command-entry">
+                            <span class="entry-index">${catalog.commands.indexOf(item).plus(1).toString().padStart(2, '0')}</span>
+                            <div class="entry-name"><span class="command-mark">/</span>${item.name}</div>
+                            @if(item.description.isBlank())
+                                <p class="entry-description empty">No description available.</p>
+                            @else
+                                <p class="entry-description">${item.description.trim()}</p>
+                            @endif
+                            @if(item.aliases.isNotEmpty())
+                                <div class="aliases">Aliases · ${item.aliases.joinToString(" · ")}</div>
+                            @endif
+                        </article>
+                    @endfor
+                    @if(catalog.commands.size % 3 == 1)
+                        <div class="grid-fill span-two"></div>
+                    @endif
+                    @if(catalog.commands.size % 3 == 2)
+                        <div class="grid-fill"></div>
+                    @endif
+                </div>
+            @endif
+        </section>
+
+        <section class="directory routes">
+            <div class="section-head">
+                <h2>Routes</h2>
+                <span class="section-count">${catalog.routes.size.toString().padStart(2, '0')} entries</span>
+            </div>
+            @if(catalog.routes.isEmpty())
+                <div class="empty-state">No routes available.</div>
+            @else
+                <div class="entry-grid route-grid">
+                    @for(item in catalog.routes)
+                        <article class="entry route-entry">
+                            <span class="entry-index">${catalog.routes.indexOf(item).plus(1).toString().padStart(2, '0')}</span>
+                            <div class="entry-name"><span class="route-mark">$</span>${item.name}</div>
+                            @if(item.description.isBlank())
+                                <p class="entry-description empty">No description available.</p>
+                            @else
+                                <p class="entry-description">${item.description.trim()}</p>
+                            @endif
+                        </article>
+                    @endfor
+                    @if(catalog.routes.size % 2 == 1)
+                        <div class="grid-fill"></div>
+                    @endif
+                </div>
+            @endif
+        </section>
+    </main>
+
+    <footer>
+        <span>Extension index</span>
+        <span>ERII BOT</span>
+    </footer>
+</div>
+</body>
+</html>

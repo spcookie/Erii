@@ -7,5 +7,6 @@ annotation class Cmd(
     val alias: Array<String> = [],
     val toolSets: Array<String> = ["default"],
     val onLoad: Array<String> = [],
-    val onUnload: Array<String> = []
+    val onUnload: Array<String> = [],
+    val description: String = "",
 )

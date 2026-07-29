@@ -6,6 +6,8 @@ import org.koin.core.context.GlobalContext
 import org.koin.core.parameter.parametersOf
 import org.pf4j.PluginState
 import uesugi.LOG
+import uesugi.common.BotManage
+import uesugi.common.toolkit.ConfigHolder
 import uesugi.core.route.CmdRuleRegister
 import uesugi.core.route.MetaToolSetRegister
 import uesugi.core.route.RouteRuleRegister
@@ -21,6 +23,17 @@ data class PluginRefreshResult(
     val failedPlugins: Map<String, String> = emptyMap(),
 )
 
+data class PluginHelpItem(
+    val name: String,
+    val description: String,
+    val aliases: List<String> = emptyList(),
+)
+
+data class PluginHelpCatalog(
+    val commands: List<PluginHelpItem>,
+    val routes: List<PluginHelpItem>,
+)
+
 class PluginLifecycleManager(
     private val pluginManager: AgentPluginManager,
     private val promptExecutor: PromptExecutor,
@@ -29,6 +42,17 @@ class PluginLifecycleManager(
 ) {
     private val lock = Any()
     private val handlesByPlugin = linkedMapOf<String, MutableList<ExtensionHandle>>()
+
+    fun getHelpCatalog(botId: String): PluginHelpCatalog = synchronized(lock) {
+        val botConfigKey = BotManage.getConfigKey(botId)
+        val enabledExtensions = handlesByPlugin
+            .filterKeys { pluginId ->
+                pluginId == "builtin" || ConfigHolder.isPluginEnabled(botConfigKey, pluginId)
+            }
+            .mapValues { (_, handles) -> handles.map { it.extension } }
+
+        buildPluginHelpCatalog(enabledExtensions)
+    }
 
     fun refreshAll(): PluginRefreshResult = synchronized(lock) {
         val failed = linkedMapOf<String, String>()
@@ -287,6 +311,38 @@ class PluginLifecycleManager(
         }
     }
 }
+
+internal fun buildPluginHelpCatalog(
+    extensionsByPlugin: Map<String, List<AgentExtension<*>>>,
+): PluginHelpCatalog =
+    PluginHelpCatalog(
+        commands = extensionsByPlugin
+            .filterKeys { pluginId -> pluginId != "builtin" }
+            .values
+            .flatten()
+            .filterIsInstance<CmdExtension<*, *, *>>()
+            .map { extension ->
+                PluginHelpItem(
+                    name = extension.cmd,
+                    description = extension.description,
+                    aliases = extension.alias,
+                )
+            }
+            .distinctBy { it.name }
+            .sortedBy { it.name.lowercase() },
+        routes = extensionsByPlugin
+            .values
+            .flatten()
+            .filterIsInstance<RouteExtension<*>>()
+            .map { extension ->
+                PluginHelpItem(
+                    name = extension.matcher.first,
+                    description = extension.description,
+                )
+            }
+            .distinctBy { it.name }
+            .sortedBy { it.name.lowercase() },
+    )
 
 private fun closeResources(
     extension: AgentExtension<*>,

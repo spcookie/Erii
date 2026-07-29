@@ -29,13 +29,7 @@ fun Application.configureRouting() {
         json(JSON)
     }
     install(Jte) {
-        val isDevelopment = System.getProperty("intellij.debug.agent") != null
-        templateEngine = if (isDevelopment) {
-            val targetDirectory: Path = Path.of("erii-core/jte-classes")
-            TemplateEngine.createPrecompiled(targetDirectory, JteContentType.Html)
-        } else {
-            TemplateEngine.createPrecompiled(JteContentType.Html)
-        }
+        templateEngine = createJteTemplateEngine()
     }
     routing {
         configureBotStatus()
@@ -47,5 +41,15 @@ fun Application.configureRouting() {
         authenticate("basic") {
             staticResources("/", "assets")
         }
+    }
+}
+
+fun createJteTemplateEngine(): TemplateEngine {
+    val isDevelopment = System.getProperty("intellij.debug.agent") != null
+    return if (isDevelopment) {
+        val targetDirectory: Path = Path.of("erii-core/jte-classes")
+        TemplateEngine.createPrecompiled(targetDirectory, JteContentType.Html)
+    } else {
+        TemplateEngine.createPrecompiled(JteContentType.Html)
     }
 }

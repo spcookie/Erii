@@ -26,6 +26,11 @@ class PluginDefinitionTest {
         assertEquals(1, extension.commandReads)
     }
 
+    @Test
+    fun `agent extension description defaults to empty`() {
+        assertEquals("", DynamicCommand().description)
+    }
+
     private class DynamicCommand : CmdExtension<Unit, ArgParserHolder.Empty, TestPlugin> {
         var command: String = "default-command"
         var commandReads: Int = 0

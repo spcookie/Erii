@@ -4,11 +4,13 @@ import io.ktor.http.*
 import io.ktor.serialization.jackson.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
+import io.ktor.server.jte.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.routing.*
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.server.SystemConfigHolder
+import uesugi.server.createJteTemplateEngine
 import uesugi.spi.PluginDef
 import uesugi.spi.Server
 
@@ -56,6 +58,9 @@ class ServerImpl(val defined: PluginDef) : Server {
                 workerGroupSize = 5
                 callGroupSize = 10
             }) {
+                install(Jte) {
+                    templateEngine = createJteTemplateEngine()
+                }
                 install(ContentNegotiation) {
                     jackson()
                 }

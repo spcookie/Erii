@@ -118,7 +118,11 @@ suspend fun handleMessage(event: MessageReceivedEvent) {
 由 `RoutingAgent` 根据 LLM 意图分类（`key` 为路由标识，`desc` 为 LLM 判断依据）自动匹配调用。
 
 ```kotlin
-@Route(key = "REQUEST_R18_IMAGE", desc = "request an R18 image from lolisuki")
+@Route(
+    key = "REQUEST_R18_IMAGE",
+    desc = "request an R18 image from lolisuki",
+    description = "发送一张随机图片",
+)
 suspend fun lolisukiRoute(meta: Meta): String {
     // ...
 }
@@ -128,6 +132,7 @@ suspend fun lolisukiRoute(meta: Meta): String {
 |-----------------------|----------------------------|
 | `key`                 | LLM 路由标识，用于匹配后的路由 key      |
 | `desc`                | LLM 路由判断依据，描述什么情况下匹配到此路由   |
+| `description`         | 面向用户展示的扩展说明（默认空字符串）        |
 | `toolSets`            | 关联的工具集名称（默认 `["default"]`） |
 | `onLoad` / `onUnload` | 引用的命名生命周期函数名               |
 
@@ -138,7 +143,7 @@ suspend fun lolisukiRoute(meta: Meta): String {
 通过 `/cmd` 前缀匹配调用，适合聊天中的命令交互。
 
 ```kotlin
-@Cmd(name = "ping", alias = ["p"])
+@Cmd(name = "ping", description = "检查插件是否在线", alias = ["p"])
 suspend fun ping(meta: Meta, args: List<String>): String {
     return "pong!"
 }
@@ -147,6 +152,7 @@ suspend fun ping(meta: Meta, args: List<String>): String {
 | 参数                    | 说明              |
 |-----------------------|-----------------|
 | `name`                | 命令名（匹配 `/name`） |
+| `description`         | 面向用户展示的扩展说明（默认空字符串） |
 | `alias`               | 命令别名            |
 | `toolSets`            | 关联工具集名称         |
 | `onLoad` / `onUnload` | 引用的命名生命周期函数名    |
@@ -158,13 +164,15 @@ suspend fun ping(meta: Meta, args: List<String>): String {
 常驻后台的扩展，通过 `context.chain {}` 注册消息处理器，或注册工具集和事件监听。
 
 ```kotlin
-@Passive
+@Passive(description = "处理每条群消息")
 suspend fun myHandler(meta: Meta) {
     // 每条消息都会经过这里
     val input = meta.input ?: return
     // 处理逻辑...
 }
 ```
+
+`description` 是面向用户展示的扩展说明，默认为空字符串；其余参数与 `@Cmd` 的 `toolSets`、生命周期引用一致。
 
 函数签名要求：`suspend fun xxx(meta: Meta)`。
 

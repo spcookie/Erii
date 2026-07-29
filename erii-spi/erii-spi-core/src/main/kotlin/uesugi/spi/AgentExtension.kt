@@ -62,6 +62,9 @@ interface AgentExtension<T : AgentPlugin> : ExtensionPoint {
     val name: String
         get() = (PLUGIN_CONTEXT_HOLDER[ref]?.let { it.pluginId + "_" } ?: "") + this::class.simpleName!!
 
+    val description: String
+        get() = ""
+
     fun onLoad(context: PluginContext)
 
     fun onUnload() {}

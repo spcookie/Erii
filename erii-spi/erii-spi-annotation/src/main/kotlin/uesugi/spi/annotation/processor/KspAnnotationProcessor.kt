@@ -463,6 +463,10 @@ class KspAnnotationProcessor(
                 globalOnEvent = globalOnEvent,
                 toolSets = routeAnno.stringArrayArg("toolSets"),
                 extraProperties = {
+                    appendLine("    override val description: String")
+                    appendLine(
+                        "        get() = \"${routeAnno.stringArg("description").escapeForLiteral()}\""
+                    )
                     appendLine("    override val matcher: Pair<String, String>")
                     appendLine(
                         "        get() = \"${
@@ -509,6 +513,10 @@ class KspAnnotationProcessor(
                 globalOnEvent = globalOnEvent,
                 toolSets = cmdAnno.stringArrayArg("toolSets"),
                 extraProperties = {
+                    appendLine("    override val description: String")
+                    appendLine(
+                        "        get() = \"${cmdAnno.stringArg("description").escapeForLiteral()}\""
+                    )
                     appendLine("    override val cmd: String")
                     appendLine("        get() = \"$cmdName\"")
                     if (aliases.isNotEmpty()) {
@@ -554,6 +562,13 @@ class KspAnnotationProcessor(
                 globalOnUnload = globalOnUnload,
                 globalOnEvent = globalOnEvent,
                 toolSets = passiveAnno.stringArrayArg("toolSets"),
+                extraProperties = {
+                    appendLine("    override val description: String")
+                    appendLine(
+                        "        get() = \"${passiveAnno.stringArg("description").escapeForLiteral()}\""
+                    )
+                    appendLine()
+                },
             )
         }
     }
