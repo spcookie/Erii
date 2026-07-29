@@ -14,9 +14,6 @@ class Chat : RouteExtension<Builtin>, BuiltinExtension {
     override val name: String
         get() = "builtin_chat"
 
-    override val description: String
-        get() = "Handles casual conversation and unmatched messages."
-
     override val matcher: Pair<String, String>
         get() = "CHAT" to """
                 当消息不属于其他类型时，默认归类为 CHAT。

@@ -28,9 +28,6 @@ class Help : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExtensio
     override val name: String
         get() = "builtin_help"
 
-    override val description: String
-        get() = "列出当前可用的命令与路由"
-
     override val cmd: String
         get() = "help"
 

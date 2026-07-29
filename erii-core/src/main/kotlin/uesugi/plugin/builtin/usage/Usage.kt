@@ -23,9 +23,6 @@ class Usage : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExtensi
     override val name: String
         get() = "builtin_usage"
 
-    override val description: String
-        get() = "查看当前群组的模型用量"
-
     override val cmd: String
         get() = "usage"
 
