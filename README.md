@@ -53,16 +53,9 @@ erii 是一个能像真人一样参与群聊的 AI 机器人。它有情绪、�
 - **NapCat** — QQ 接入服务
 - **LLM API Key** — 至少一个 LLM 提供商的 API Key
 
-### npm 安装（推荐）
+### 安装
 
-```bash
-npm create @spcookie/erii
-cd erii
-erii setup     # 交互式配置向导
-erii server    # 启动服务
-```
-
-或一键安装：
+一键安装：
 
 ```bash
 # Linux / macOS
@@ -70,6 +63,23 @@ curl -fsSL https://raw.githubusercontent.com/spcookie/erii-distribution/master/s
 
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/spcookie/erii-distribution/master/scripts/install.ps1 | iex
+```
+
+npm 全局安装
+
+```bash
+npm install -g @spcookie/erii
+erii setup           # 交互式配置向导
+erii server start    # 启动服务
+```
+
+npm 项目安装
+
+```bash
+npm create erii-bot
+cd erii
+npx erii setup           # 交互式配置向导
+npx erii server start    # 启动服务
 ```
 
 ### Docker 部署
@@ -88,10 +98,11 @@ go install ./erii-cli
 
 | 命令          | 说明                  |
 |:--------------|:----------------------|
-| `erii config` | 交互式 TUI 配置编辑器 |
 | `erii setup`  | 设置向导              |
+| `erii config` | 交互式 TUI 配置编辑器 |
 | `erii manage` | 数据管理 TUI          |
 | `erii status` | 状态统计 TUI          |
+| `erii usage`  | Token 用量统计 TUI    |
 
 ## 🛠️ 技术栈
 

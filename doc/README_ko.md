@@ -53,16 +53,7 @@ erii는 실제 사람처럼 그룹 채팅에 참여하는 AI 봇입니다. 감�
 - **NapCat** — QQ 연동 서비스
 - **LLM API Key** — 최소 하나의 LLM 제공자 API 키
 
-### npm 설치 (권장)
-
-```bash
-npm create @spcookie/erii
-cd erii
-erii setup     # 대화형 설정 마법사
-erii server    # 서버 시작
-```
-
-또는 원라인 설치:
+원라인 설치:
 
 ```bash
 # Linux / macOS
@@ -70,6 +61,23 @@ curl -fsSL https://raw.githubusercontent.com/spcookie/erii-distribution/master/s
 
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/spcookie/erii-distribution/master/scripts/install.ps1 | iex
+```
+
+npm 글로벌 설치
+
+```bash
+npm install -g @spcookie/erii
+erii setup           # 대화형 설정 마법사
+erii server start    # 서버 시작
+```
+
+npm 프로젝트 설치
+
+```bash
+npm create erii-bot
+cd erii
+npx erii setup           # 대화형 설정 마법사
+npx erii server start    # 서버 시작
 ```
 
 ### Docker 배포
@@ -88,10 +96,11 @@ go install ./erii-cli
 
 | 명령어        | 설명                   |
 |:--------------|:-----------------------|
-| `erii config` | 대화형 TUI 설정 편집기 |
 | `erii setup`  | 설정 마법사            |
+| `erii config` | 대화형 TUI 설정 편집기 |
 | `erii manage` | 데이터 관리 TUI        |
 | `erii status` | 상태 TUI               |
+| `erii usage`  | 토큰 사용량 TUI        |
 
 ## 🛠️ 기술 스택
 

@@ -55,16 +55,7 @@ gradually becomes a natural part of the group.
 - **NapCat** — QQ integration service
 - **LLM API Key** — At least one LLM provider API key
 
-### npm Install (Recommended)
-
-```bash
-npm create @spcookie/erii
-cd erii
-erii setup     # Interactive configuration wizard
-erii server    # Start the server
-```
-
-Or one-line install:
+One-line install:
 
 ```bash
 # Linux / macOS
@@ -72,6 +63,23 @@ curl -fsSL https://raw.githubusercontent.com/spcookie/erii-distribution/master/s
 
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/spcookie/erii-distribution/master/scripts/install.ps1 | iex
+```
+
+npm global install
+
+```bash
+npm install -g @spcookie/erii
+erii setup           # Interactive configuration wizard
+erii server start    # Start the server
+```
+
+npm project install
+
+```bash
+npm create erii-bot
+cd erii
+npx erii setup           # Interactive configuration wizard
+npx erii server start    # Start the server
 ```
 
 ### Docker Deployment
@@ -90,10 +98,11 @@ go install ./erii-cli
 
 | Command       | Description                   |
 |:--------------|:------------------------------|
-| `erii config` | Interactive TUI config editor |
 | `erii setup`  | Setup wizard                  |
+| `erii config` | Interactive TUI config editor |
 | `erii manage` | Data management TUI           |
 | `erii status` | Status TUI                    |
+| `erii usage`  | Token usage TUI               |
 
 ## 🛠️ Tech Stack
 
