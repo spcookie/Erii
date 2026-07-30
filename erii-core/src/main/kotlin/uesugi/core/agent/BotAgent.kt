@@ -32,7 +32,6 @@ import uesugi.core.component.usage.UsageContext
 import uesugi.core.mcp.McpManager
 import kotlin.reflect.full.hasAnnotation
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.ExperimentalTime
 
 
 object BotAgent {
@@ -357,11 +356,17 @@ object BotAgent {
                             }
 
                             val supportsVision = supportsVisionProvider()
+                            val supportsAudio = supportsAudioProvider()
 
                             suspend fun runWithRetry(targetEvent: ProactiveSpeakEvent) {
                                 rateLimited = false
                                 chatRateLimiter.reset()
-                                val registry = buildAgentToolRegistry(targetEvent, context, supportsVision)
+                                val registry = buildAgentToolRegistry(
+                                    targetEvent,
+                                    context,
+                                    supportsVision,
+                                    supportsAudio,
+                                )
                                 chatMessageToolNames = registry.tools
                                     .filterIsInstance<ToolFromCallable<*>>()
                                     .filter { it.callable.hasAnnotation<ChatMessage>() }
@@ -472,9 +477,10 @@ object BotAgent {
     private suspend fun buildAgentToolRegistry(
         event: ProactiveSpeakEvent,
         context: Context,
-        supportsVision: Boolean
+        supportsVision: Boolean,
+        supportsAudio: Boolean,
     ): ToolRegistry {
-        val baseRegistry = with(buildToolEnv(event, context, supportsVision)) { buildToolRegistry() }
+        val baseRegistry = with(buildToolEnv(event, context, supportsVision, supportsAudio)) { buildToolRegistry() }
         val mcpRegistry = runCatching { McpManager.registry() }
             .onFailure { log.error("Failed to load MCP tools", it) }
             .getOrDefault(ToolRegistry.EMPTY)
@@ -504,7 +510,12 @@ object BotAgent {
         var error: Exception? = null
         try {
             val additionalToolRegistry = preBuiltRegistry
-                ?: buildAgentToolRegistry(event, context, supportsVisionProvider())
+                ?: buildAgentToolRegistry(
+                    event,
+                    context,
+                    supportsVisionProvider(),
+                    supportsAudioProvider(),
+                )
             val text = aiAgent.createAgentAndRun(
                 agentInput = event.input ?: DEFAULT_INPUT,
                 agentConfig = AIAgentConfig(

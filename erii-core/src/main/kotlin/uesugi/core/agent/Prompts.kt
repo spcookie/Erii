@@ -15,17 +15,11 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import okio.Path.Companion.toPath
-import okio.buffer
 import uesugi.common.BotManage
 import uesugi.common.LLMModelChoice
 import uesugi.common.data.HistoryRecord
 import uesugi.common.data.MessageType
 import uesugi.common.toolkit.DateTimeFormat
-import uesugi.common.toolkit.ref
-import uesugi.core.component.storage.ObjectStorage
-import uesugi.core.message.resource.ResourceService
-import uesugi.core.message.resource.ThumbnailService
 import uesugi.core.rule.Rule
 import uesugi.core.state.evolution.LearnedVocabEntity
 import uesugi.core.state.memory.FactsEntity
@@ -42,14 +36,12 @@ internal suspend fun buildPrompt(
     val constraints = buildConstraint(context, transient)
 
     val imageSources = if (supportsVision) {
-        val objectStorage: ObjectStorage by ref()
-        val thumbnailService: ThumbnailService by ref()
         val imageHistories = transient.histories
             .filter { it.messageType == MessageType.IMAGE && context.currentBotId != it.userId }
         val lastImageId = imageHistories.lastOrNull()?.id
         imageHistories.associate { history ->
-            val useOriginal = history.id == lastImageId
-            history.id to loadImageSource(history, objectStorage, thumbnailService, useOriginal)
+            val useThumbnail = history.id != lastImageId
+            history.id to loadImageSource(context, history, useThumbnail)
         }
     } else emptyMap()
 
@@ -98,6 +90,9 @@ internal suspend fun buildPrompt(
                     if (!supportsVision) {
                         line { text("图片：包含图片ID：image_id") }
                     }
+                    if (!supportsAudio) {
+                        line { text("音频：包含音频ID：audio_id；需要理解音频内容时调用 transcribeAudio。") }
+                    }
                 }
             }
         }
@@ -138,7 +133,7 @@ internal suspend fun buildPrompt(
                         audio(audioSource)
                     }
                 } else {
-                    user(prefix + "[音频]")
+                    user(prefix + "[audio_id:${history.id}] [音频]")
                 }
             } else {
                 val content = buildString {
@@ -204,41 +199,23 @@ private fun buildBotToolCall(history: HistoryRecord, callId: String): MessagePar
 }
 
 private suspend fun loadImageSource(
+    context: Context,
     history: HistoryRecord,
-    objectStorage: ObjectStorage,
-    thumbnailService: ThumbnailService,
-    useOriginal: Boolean = false
+    useThumbnail: Boolean = false,
 ): AttachmentSource.Image? {
-    val resource = history.resource ?: return null
-    val resourceService: ResourceService by ref()
-
-    return try {
-        val fullResource = resourceService.getResource(resource.id ?: return null) ?: return null
-        val bytes = if (useOriginal) {
-            objectStorage.get(fullResource.url.toPath()).buffer().readByteArray()
-        } else {
-            thumbnailService.getThumbnail(fullResource) ?: return null
-        }
-        val format = extractImageFormat(fullResource.fileName)
-        AttachmentSource.Image(
-            content = AttachmentContent.Binary.Bytes(bytes),
-            format = format,
-            fileName = fullResource.fileName
-        )
-    } catch (_: Exception) {
-        null
-    }
+    val image = loadMediaResource(context, history, useThumbnail) ?: return null
+    return AttachmentSource.Image(
+        content = AttachmentContent.Binary.Bytes(image.bytes),
+        format = image.format.ifBlank { "png" },
+        fileName = image.fileName,
+    )
 }
 
 private suspend fun loadAudioSource(
     context: Context,
     history: HistoryRecord,
 ): AttachmentSource.Audio? {
-    val audio = try {
-        context.audio(history)
-    } catch (_: Exception) {
-        null
-    } ?: return null
+    val audio = loadMediaResource(context, history, useThumbnail = false) ?: return null
 
     val format = audio.format.lowercase()
         .takeIf { it in AUDIO_FORMATS }
@@ -250,13 +227,17 @@ private suspend fun loadAudioSource(
     )
 }
 
-private val AUDIO_FORMATS = setOf("mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "webm", "amr", "silk")
-
-private fun extractImageFormat(fileName: String): String {
-    return fileName.substringAfterLast(".", "")
-        .lowercase()
-        .takeIf { it.isNotEmpty() } ?: "png"
+private suspend fun loadMediaResource(
+    context: Context,
+    history: HistoryRecord,
+    useThumbnail: Boolean,
+): MediaResource? = try {
+    context.mediaResource(history, useThumbnail)
+} catch (_: Exception) {
+    null
 }
+
+private val AUDIO_FORMATS = setOf("mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "webm", "amr", "silk")
 
 private fun MarkdownContentBuilder.buildStableSystemPrompt(context: Context) {
     text(context.botRole.personality(context.currentBotId))

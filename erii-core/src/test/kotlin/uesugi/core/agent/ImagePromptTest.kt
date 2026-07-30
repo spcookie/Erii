@@ -13,97 +13,74 @@ import uesugi.common.data.ResourceRecord
 import uesugi.common.event.InterruptionMode
 import kotlin.test.*
 
-class AudioPromptTest {
+class ImagePromptTest {
 
     @Test
-    fun `audio capable prompt attaches original audio bytes`() = runBlocking {
-        val bytes = "audio-content".encodeToByteArray()
+    fun `vision capable prompt reads image through context callback`() = runBlocking {
+        val bytes = "image-content".encodeToByteArray()
         var reads = 0
+        var requestedThumbnail = true
         val prompt = buildPrompt(
-            context = context { _, _ ->
+            context = context { _, useThumbnail ->
                 reads++
-                MediaResource(bytes, "mp3", "voice.mp3")
+                requestedThumbnail = useThumbnail
+                MediaResource(bytes, "png", "cat.png")
             },
-            supportsVision = false,
-            supportsAudio = true,
+            supportsVision = true,
+            supportsAudio = false,
         )
 
         val attachment = prompt.messages
             .flatMap { it.parts }
             .filterIsInstance<MessagePart.Attachment>()
             .single()
-        val source = assertIs<AttachmentSource.Audio>(attachment.source)
+        val source = assertIs<AttachmentSource.Image>(attachment.source)
         val content = assertIs<AttachmentContent.Binary.Bytes>(source.content)
 
         assertEquals(1, reads)
-        assertEquals("mp3", source.format)
-        assertEquals("voice.mp3", source.fileName)
+        assertFalse(requestedThumbnail)
+        assertEquals("png", source.format)
+        assertEquals("cat.png", source.fileName)
         assertContentEquals(bytes, content.data)
     }
 
     @Test
-    fun `audio disabled uses placeholder without reading object storage`() = runBlocking {
+    fun `vision disabled uses image id without reading context resource`() = runBlocking {
         var reads = 0
         val prompt = buildPrompt(
             context = context { _, _ ->
                 reads++
-                MediaResource(byteArrayOf(1), "mp3", "voice.mp3")
+                MediaResource(byteArrayOf(1), "png", "cat.png")
             },
             supportsVision = false,
             supportsAudio = false,
         )
 
         assertEquals(0, reads)
-        assertTrue(prompt.messages.any { it.textContent().contains("[音频]") })
-        assertTrue(prompt.messages.any { it.textContent().contains("[audio_id:1]") })
+        assertTrue(prompt.messages.any { it.textContent().contains("[image_id:1]") })
         assertFalse(prompt.messages.flatMap { it.parts }.any { it is MessagePart.Attachment })
     }
 
     @Test
-    fun `missing invalid or failed audio falls back to placeholder`() = runBlocking {
-        val contexts = listOf(
-            context { _, _ -> null },
-            context { _, _ -> MediaResource(byteArrayOf(1), "bin", "voice.bin") },
-            context { _, _ -> error("storage failed") },
-        )
+    fun `older images request thumbnails while latest image requests original`() = runBlocking {
+        val thumbnailRequests = mutableListOf<Boolean>()
 
-        for (context in contexts) {
-            val prompt = buildPrompt(
-                context = context,
-                supportsVision = false,
-                supportsAudio = true,
-            )
-            assertTrue(prompt.messages.any { it.textContent().contains("[音频]") })
-            assertTrue(prompt.messages.any { it.textContent().contains("[audio_id:1]") })
-            assertFalse(prompt.messages.flatMap { it.parts }.any { it is MessagePart.Attachment })
-        }
-    }
-
-    @Test
-    fun `bot audio history is rendered as placeholder and never loaded`() = runBlocking {
-        var reads = 0
-        val prompt = buildPrompt(
+        buildPrompt(
             context = context(
-                history = audioHistory(userId = "bot-a"),
-            ) { _, _ ->
-                reads++
-                MediaResource(byteArrayOf(1), "mp3", "voice.mp3")
+                histories = listOf(imageHistory(1), imageHistory(2)),
+            ) { history, useThumbnail ->
+                thumbnailRequests += useThumbnail
+                MediaResource(byteArrayOf(history.id!!.toByte()), "png", "image-${history.id}.png")
             },
-            supportsVision = false,
-            supportsAudio = true,
+            supportsVision = true,
+            supportsAudio = false,
         )
 
-        val call = prompt.messages
-            .flatMap { it.parts }
-            .filterIsInstance<MessagePart.Tool.Call>()
-            .single()
-
-        assertEquals(0, reads)
-        assertTrue(call.args.contains("[音频]"))
+        assertEquals(listOf(true, false), thumbnailRequests)
     }
 
     private fun context(
-        history: HistoryRecord = audioHistory(),
+        histories: List<HistoryRecord> = listOf(imageHistory()),
         mediaResource: suspend (HistoryRecord, Boolean) -> MediaResource?,
     ) = Context(
         currentBotId = "bot-a",
@@ -125,7 +102,7 @@ class AudioPromptTest {
         userProfiles = { emptyList() },
         vocabulary = { emptyList() },
         summary = { null },
-        histories = { listOf(history) },
+        histories = { histories },
         moreHistories = { emptyList() },
         rules = { emptyList() },
         admins = { emptyList() },
@@ -134,20 +111,20 @@ class AudioPromptTest {
         mediaResource = mediaResource,
     )
 
-    private fun audioHistory(userId: String = "user-a") = HistoryRecord(
-        id = 1,
+    private fun imageHistory(id: Int = 1) = HistoryRecord(
+        id = id,
         botMark = "bot-a",
         groupId = "group-a",
-        userId = userId,
+        userId = "user-a",
         nick = "Alice",
-        messageType = MessageType.AUDIO,
-        content = "ignored audio content",
+        messageType = MessageType.IMAGE,
+        content = "[图片]",
         resource = ResourceRecord(
-            id = 10,
+            id = id + 9,
             botMark = "bot-a",
             groupId = "group-a",
-            url = "./audio/group-a/voice.mp3",
-            fileName = "voice.mp3",
+            url = "./image/group-a/cat.png",
+            fileName = "cat.png",
             size = 13,
             md5 = "md5",
             createdAt = LocalDateTime(2026, 1, 1, 0, 0),
