@@ -17,10 +17,14 @@ import (
 )
 
 const (
-	segHit    = "Hit"
-	segMiss   = "Miss"
-	segOutput = "Output"
-	noDataMsg = "No daily data available"
+	segHit                = "Hit"
+	segMiss               = "Miss"
+	segOutput             = "Output"
+	noDataMsg             = "No daily data available"
+	heatmapCellWidth      = 2
+	heatmapCellHeight     = 1
+	heatmapMaxMonths      = 6
+	heatmapLegendMinWidth = 21
 )
 
 func truncateModelName(name string, maxLen int) string {
@@ -230,6 +234,53 @@ func (m *UsageViewModel) buildColumnChart(title string, rows []api.TokenUsageCha
 
 // ── Daily Heatmap ──
 
+type dailyHeatmapLayout struct {
+	startDate   time.Time
+	endDate     time.Time
+	weekStart   time.Time
+	numWeeks    int
+	monthCount  int
+	canvasWidth int
+}
+
+func calculateDailyHeatmapLayout(lastDate time.Time, maxWidth int) dailyHeatmapLayout {
+	endDate := time.Date(lastDate.Year(), lastDate.Month()+1, 0, 0, 0, 0, 0, time.UTC)
+	selected := dailyHeatmapLayout{}
+
+	for monthCount := heatmapMaxMonths; monthCount >= 1; monthCount-- {
+		startDate := time.Date(
+			lastDate.Year(),
+			lastDate.Month()-time.Month(monthCount-1),
+			1,
+			0,
+			0,
+			0,
+			0,
+			time.UTC,
+		)
+		weekStart := startDate
+		for weekStart.Weekday() != time.Sunday {
+			weekStart = weekStart.AddDate(0, 0, -1)
+		}
+		numWeeks := int(endDate.Sub(weekStart).Hours()/24/7) + 1
+		gridWidth := numWeeks * heatmapCellWidth
+
+		selected = dailyHeatmapLayout{
+			startDate:   startDate,
+			endDate:     endDate,
+			weekStart:   weekStart,
+			numWeeks:    numWeeks,
+			monthCount:  monthCount,
+			canvasWidth: max(gridWidth, heatmapLegendMinWidth),
+		}
+		if gridWidth <= maxWidth {
+			break
+		}
+	}
+
+	return selected
+}
+
 func (m *UsageViewModel) buildHeatmap(cw int) (string, int) {
 	series := m.data.DailySeries
 	if len(series) == 0 {
@@ -252,25 +303,11 @@ func (m *UsageViewModel) buildHeatmap(cw int) (string, int) {
 	if err != nil {
 		return "", 0
 	}
-	startDate := time.Date(lastDate.Year(), lastDate.Month()-5, 1, 0, 0, 0, 0, time.UTC)
-	endDate := time.Date(lastDate.Year(), lastDate.Month()+1, 0, 0, 0, 0, 0, time.UTC)
-	weekStart := startDate
-	for weekStart.Weekday() != time.Sunday {
-		weekStart = weekStart.AddDate(0, 0, -1)
-	}
-	weekEnd := endDate
-	numWeeks := int(weekEnd.Sub(weekStart).Hours()/24/7) + 1
+	layout := calculateDailyHeatmapLayout(lastDate, cw)
+	heatW := layout.canvasWidth
+	offsetX := (heatW - layout.numWeeks*heatmapCellWidth) / 2
 
-	heatW := cw
-	cellW := heatW / numWeeks
-	if cellW < 1 {
-		cellW = 1
-	}
-	offsetX := (heatW - numWeeks*cellW) / 2
-
-
-	cellH := max(1, cellW*2/3)
-	dayRows := 7 * cellH
+	dayRows := 7 * heatmapCellHeight
 	heatH := 1 + dayRows + 1 + 1 // month labels + day cells + spacer + legend
 	cellBaseY := 1               // day cells start at row 1 (row 0 = month labels)
 	legendY := 1 + dayRows + 1   // after cells + spacer
@@ -289,19 +326,19 @@ func (m *UsageViewModel) buildHeatmap(cw int) (string, int) {
 	var monthLabels []monthLabel
 	lastMonth := -1
 
-	dayCursor := weekStart
-	for !dayCursor.After(weekEnd) {
-		col := int(dayCursor.Sub(weekStart).Hours() / 24 / 7)
+	dayCursor := layout.weekStart
+	for !dayCursor.After(layout.endDate) {
+		col := int(dayCursor.Sub(layout.weekStart).Hours() / 24 / 7)
 		row := int(dayCursor.Weekday())
 
-		startX := offsetX + col*cellW
-		endX := startX + cellW
-		canvasY := cellBaseY + row*cellH
+		startX := offsetX + col*heatmapCellWidth
+		endX := startX + heatmapCellWidth
+		canvasY := cellBaseY + row*heatmapCellHeight
 
 		dateKey := dayCursor.Format("2006-01-02")
 		tokens := tokenByDate[dateKey]
 
-		inRange := !dayCursor.Before(startDate) && !dayCursor.After(endDate)
+		inRange := !dayCursor.Before(layout.startDate) && !dayCursor.After(layout.endDate)
 		colorIdx := 0
 		if inRange && tokens > 0 {
 			frac := float64(tokens) / float64(maxV)
@@ -334,7 +371,7 @@ func (m *UsageViewModel) buildHeatmap(cw int) (string, int) {
 		cellStyle := lipgloss.NewStyle().Background(bg).Foreground(bg)
 		borderStyle := lipgloss.NewStyle().Background(borderBg).Foreground(borderBg)
 
-		for dy := 0; dy < cellH; dy++ {
+		for dy := 0; dy < heatmapCellHeight; dy++ {
 			cy := canvasY + dy
 			if cy >= heatH {
 				break
@@ -349,7 +386,9 @@ func (m *UsageViewModel) buildHeatmap(cw int) (string, int) {
 		}
 
 		month := int(dayCursor.Month())
-		if month != lastMonth && !dayCursor.Before(startDate) && !dayCursor.After(endDate) {
+		if month != lastMonth &&
+			!dayCursor.Before(layout.startDate) &&
+			!dayCursor.After(layout.endDate) {
 			lastMonth = month
 			monthLabels = append(monthLabels, monthLabel{
 				col:  col,
@@ -367,11 +406,11 @@ func (m *UsageViewModel) buildHeatmap(cw int) (string, int) {
 	// Draw month labels on canvas row 0
 	labelRunes := []rune(strings.Repeat(" ", heatW))
 	for i, ml := range monthLabels {
-		pos := offsetX + ml.col*cellW
+		pos := offsetX + ml.col*heatmapCellWidth
 		nameRunes := []rune(ml.name)
 		limit := heatW
 		if i+1 < len(monthLabels) {
-			limit = offsetX + monthLabels[i+1].col*cellW
+			limit = offsetX + monthLabels[i+1].col*heatmapCellWidth
 		}
 		if pos+len(nameRunes) > limit {
 			continue
@@ -386,7 +425,8 @@ func (m *UsageViewModel) buildHeatmap(cw int) (string, int) {
 	cv.SetStringWithStyle(canvas.Point{X: 0, Y: 0}, string(labelRunes), style.MutedStyle)
 
 	// Draw color legend below cells (with spacer row)
-	legendX := heatW - 21
+	legendWidth := 5 + len(heatBlueScale) + 5
+	legendX := (heatW - legendWidth) / 2
 	if legendX < 0 {
 		legendX = 0
 	}
