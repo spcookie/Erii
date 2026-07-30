@@ -55,7 +55,7 @@ func TestSavePluginDescPersistsOnlyCorrespondingSchema(t *testing.T) {
 
 	root := t.TempDir()
 	metaDir = filepath.Join(root, ".conf")
-	eriipath.PluginSchemaDir = filepath.Join(metaDir, "plugin-config", "schema")
+	eriipath.PluginSchemaDir = filepath.Join(metaDir, "schema")
 	if err := os.MkdirAll(eriipath.PluginSchemaDir, 0755); err != nil {
 		t.Fatal(err)
 	}

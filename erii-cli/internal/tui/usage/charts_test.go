@@ -306,6 +306,73 @@ func TestHeatmapCalendar(t *testing.T) {
 	fmt.Println(hm)
 }
 
+func TestDailyHeatmapLayoutUsesSquareCellsAndAdaptiveMonths(t *testing.T) {
+	lastDate := time.Date(2026, time.June, 23, 0, 0, 0, 0, time.UTC)
+
+	if heatmapCellWidth != 2 || heatmapCellHeight != 1 {
+		t.Fatalf(
+			"heatmap cell size = %dx%d, want 2x1 terminal cells",
+			heatmapCellWidth,
+			heatmapCellHeight,
+		)
+	}
+
+	narrow := calculateDailyHeatmapLayout(lastDate, 44)
+	if narrow.canvasWidth > 44 {
+		t.Fatalf("narrow heatmap width = %d, exceeds column width 44", narrow.canvasWidth)
+	}
+	if narrow.monthCount >= heatmapMaxMonths {
+		t.Fatalf("narrow heatmap months = %d, want fewer than %d", narrow.monthCount, heatmapMaxMonths)
+	}
+	if got, want := narrow.canvasWidth, narrow.numWeeks*heatmapCellWidth; got != want {
+		t.Fatalf("narrow canvas width = %d, want week grid width %d", got, want)
+	}
+
+	wide := calculateDailyHeatmapLayout(lastDate, 60)
+	if wide.monthCount != heatmapMaxMonths {
+		t.Fatalf("wide heatmap months = %d, want %d", wide.monthCount, heatmapMaxMonths)
+	}
+	if wide.canvasWidth > 60 {
+		t.Fatalf("wide heatmap width = %d, exceeds column width 60", wide.canvasWidth)
+	}
+}
+
+func TestDailyIntensityCentersChartButKeepsTitleLeftAligned(t *testing.T) {
+	m := &UsageViewModel{
+		data:  mockUsageData(),
+		width: 100,
+	}
+	m.buildCharts()
+
+	halfW := (m.chartWidth() - 2 - 4) / 2
+	column := buildDailyIntensityColumn(m.heatmap, halfW)
+	lines := strings.Split(column, "\n")
+	if len(lines) < 3 {
+		t.Fatalf("Daily Intensity column has %d lines, want title, spacer, and chart", len(lines))
+	}
+	if !strings.HasPrefix(ansi.Strip(lines[0]), "Daily Intensity") {
+		t.Fatalf("Daily Intensity title is not left-aligned: %q", lines[0])
+	}
+
+	heatmapWidth := maxLineVisualWidth(m.heatmap)
+	wantLeftPadding := (halfW - heatmapWidth) / 2
+	gotLeftPadding := len(lines[2]) - len(strings.TrimLeft(lines[2], " "))
+	if gotLeftPadding != wantLeftPadding {
+		t.Fatalf(
+			"heatmap left padding = %d, want %d for column width %d and chart width %d",
+			gotLeftPadding,
+			wantLeftPadding,
+			halfW,
+			heatmapWidth,
+		)
+	}
+	for i, line := range lines[2:] {
+		if got := lipgloss.Width(line); got != halfW {
+			t.Fatalf("centered heatmap line %d width = %d, want %d", i, got, halfW)
+		}
+	}
+}
+
 func TestHeatmap7Days(t *testing.T) {
 	// Test the line chart shows recent 7 days with correct date labels
 	m := &UsageViewModel{

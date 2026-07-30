@@ -1,5 +1,5 @@
 -Dpf4j.pluginsDir=./plugins
--Dconfig.plugin.dir=./conf/plugin-config
+-Dconfig.plugin.dir=./conf/plugin
 -Dconfig.path=./conf/application.conf
 -Dconfig.souls.dir=./conf/souls
 -Dconfig.rules.dir=./conf/rules

@@ -158,7 +158,7 @@ func TestPluginEditDescriptionWritesPluginSchema(t *testing.T) {
 		eriipath.PluginSchemaDir = previousSchemaDir
 	})
 
-	eriipath.PluginSchemaDir = filepath.Join(t.TempDir(), ".conf", "plugin-config", "schema")
+	eriipath.PluginSchemaDir = filepath.Join(t.TempDir(), ".conf", "schema")
 	if err := os.MkdirAll(eriipath.PluginSchemaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestPluginRenameMovesDescriptionWithinPluginSchema(t *testing.T) {
 		eriipath.PluginSchemaDir = previousSchemaDir
 	})
 
-	eriipath.PluginSchemaDir = filepath.Join(t.TempDir(), ".conf", "plugin-config", "schema")
+	eriipath.PluginSchemaDir = filepath.Join(t.TempDir(), ".conf", "schema")
 	if err := os.MkdirAll(eriipath.PluginSchemaDir, 0755); err != nil {
 		t.Fatal(err)
 	}

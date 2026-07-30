@@ -278,6 +278,7 @@ func (m *UsageViewModel) buildContent() string {
 	d := m.data
 	w := m.chartWidth()
 	panelW := w - 2
+	halfW := (panelW - 4) / 2
 
 	var rows []string
 
@@ -359,11 +360,19 @@ func (m *UsageViewModel) buildContent() string {
 
 	// Weekly trend + Daily heatmap: dual-column
 	trendCol := sectionTitle("Weekly Trend") + "\n\n" + m.lineChart
-	intensityCol := sectionTitle("Daily Intensity") + "\n\n" + m.heatmap
+	intensityCol := buildDailyIntensityColumn(m.heatmap, halfW)
 	rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Bottom, trendCol, "    ", intensityCol))
 	rows = append(rows, "")
 
 	return strings.Join(rows, "\n")
+}
+
+func buildDailyIntensityColumn(heatmap string, width int) string {
+	centeredHeatmap := lipgloss.NewStyle().
+		Width(width).
+		Align(lipgloss.Center).
+		Render(heatmap)
+	return sectionTitle("Daily Intensity") + "\n\n" + centeredHeatmap
 }
 
 func (m *UsageViewModel) buildPricingTable() []string {

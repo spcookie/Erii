@@ -26,10 +26,10 @@ class ConfigHolderImpl : ConfigProvider {
     }
 
     private val pluginConfigDir: String? by lazy {
-        val raw = System.getProperty("config.plugin.dir")
-            ?: System.getenv("CONFIG_PLUGIN_DIR")
-            ?: ((System.getProperty("pf4j.pluginsDir") ?: "plugins") + File.separator + "config")
-        File(raw).toPath().toAbsolutePath().toString()
+        resolvePluginConfigDir(
+            System.getProperty("config.plugin.dir"),
+            System.getenv("CONFIG_PLUGIN_DIR")
+        )
     }
 
     @Volatile
@@ -686,4 +686,11 @@ class ConfigHolderImpl : ConfigProvider {
     override fun getAgentMaxIterations(): Int =
         getIntOrDefault("agent.max-iterations", 50)
 
+}
+
+internal fun resolvePluginConfigDir(systemProperty: String?, environmentValue: String?): String {
+    val raw = systemProperty
+        ?: environmentValue
+        ?: File("conf", "plugin").path
+    return File(raw).toPath().toAbsolutePath().toString()
 }
