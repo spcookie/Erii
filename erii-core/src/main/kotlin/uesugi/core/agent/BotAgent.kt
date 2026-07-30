@@ -356,12 +356,12 @@ object BotAgent {
                                 agentRun(aiAgent, context, evt, reg)
                             }
 
-                            val multimodal = isMultimodalProvider()
+                            val supportsVision = supportsVisionProvider()
 
                             suspend fun runWithRetry(targetEvent: ProactiveSpeakEvent) {
                                 rateLimited = false
                                 chatRateLimiter.reset()
-                                val registry = buildAgentToolRegistry(targetEvent, context, multimodal)
+                                val registry = buildAgentToolRegistry(targetEvent, context, supportsVision)
                                 chatMessageToolNames = registry.tools
                                     .filterIsInstance<ToolFromCallable<*>>()
                                     .filter { it.callable.hasAnnotation<ChatMessage>() }
@@ -463,15 +463,18 @@ object BotAgent {
         }
     }
 
-    private fun isMultimodalProvider(): Boolean =
+    private fun supportsVisionProvider(): Boolean =
         LLMModelChoice.Pro.supports(LLMCapability.Vision.Image)
+
+    private fun supportsAudioProvider(): Boolean =
+        LLMModelChoice.Pro.supports(LLMCapability.Audio)
 
     private suspend fun buildAgentToolRegistry(
         event: ProactiveSpeakEvent,
         context: Context,
-        multimodal: Boolean
+        supportsVision: Boolean
     ): ToolRegistry {
-        val baseRegistry = with(buildToolEnv(event, context, multimodal)) { buildToolRegistry() }
+        val baseRegistry = with(buildToolEnv(event, context, supportsVision)) { buildToolRegistry() }
         val mcpRegistry = runCatching { McpManager.registry() }
             .onFailure { log.error("Failed to load MCP tools", it) }
             .getOrDefault(ToolRegistry.EMPTY)
@@ -502,11 +505,15 @@ object BotAgent {
         var error: Exception? = null
         try {
             val additionalToolRegistry = preBuiltRegistry
-                ?: buildAgentToolRegistry(event, context, isMultimodalProvider())
+                ?: buildAgentToolRegistry(event, context, supportsVisionProvider())
             val text = aiAgent.createAgentAndRun(
                 agentInput = event.input ?: DEFAULT_INPUT,
                 agentConfig = AIAgentConfig(
-                    prompt = buildPrompt(context),
+                    prompt = buildPrompt(
+                        context,
+                        supportsVision = supportsVisionProvider(),
+                        supportsAudio = supportsAudioProvider(),
+                    ),
                     model = LLMModelChoice.Flash,
                     maxAgentIterations = ConfigHolder.getAgentMaxIterations(),
                 ),

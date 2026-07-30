@@ -52,6 +52,57 @@ class ConfigHolderImplTest {
         }
     }
 
+    @Test
+    fun `stt configuration exposes provider api key url and model`() {
+        withConfig(
+            """
+            stt {
+              provider = "test-stt"
+              api-key = "secret"
+              url = "https://example.test/audio/transcriptions"
+              model = "test-model"
+            }
+            """.trimIndent()
+        ) {
+            val config = ConfigHolderImpl()
+            assertEquals("test-stt", config.getSttProvider())
+            assertEquals("secret", config.getSttApiKey())
+            assertEquals("https://example.test/audio/transcriptions", config.getSttUrl())
+            assertEquals("test-model", config.getSttModel())
+        }
+    }
+
+    @Test
+    fun `stt provider defaults to none when configuration is absent`() {
+        withConfig("") {
+            val config = ConfigHolderImpl()
+            assertEquals("none", config.getSttProvider())
+            assertEquals("", config.getSttApiKey())
+            assertEquals("", config.getSttUrl())
+            assertEquals("", config.getSttModel())
+        }
+    }
+
+    @Test
+    fun `audio capability can be disabled at default and every model tier`() {
+        withConfig(
+            """
+            llm.capability {
+              audio = false
+              lite.audio = false
+              flash.audio = false
+              pro.audio = false
+            }
+            """.trimIndent()
+        ) {
+            val config = ConfigHolderImpl()
+            assertEquals(false, config.isLlmCapabilityEnabled("audio"))
+            assertEquals(false, config.isLlmCapabilityEnabled("lite", "audio"))
+            assertEquals(false, config.isLlmCapabilityEnabled("flash", "audio"))
+            assertEquals(false, config.isLlmCapabilityEnabled("pro", "audio"))
+        }
+    }
+
     private fun withConfig(content: String, block: () -> Unit) {
         val previous = System.getProperty("config.path")
         val config = Files.createTempFile("erii-config", ".conf")

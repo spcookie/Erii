@@ -19,6 +19,7 @@ object LLMModelChoice {
         LLMCapability.MultipleChoices -> "multiple-choices"
         LLMCapability.Thinking -> "thinking"
         LLMCapability.Vision.Image -> "vision-image"
+        LLMCapability.Audio -> "audio"
         else -> ""
     }
 
@@ -56,6 +57,7 @@ object LLMModelChoice {
                     LLMCapability.ToolChoice,
                     LLMCapability.MultipleChoices,
                     LLMCapability.Vision.Image,
+                    LLMCapability.Audio,
                     LLMCapability.OpenAIEndpoint.Completions,
                 )
             )
@@ -79,6 +81,7 @@ object LLMModelChoice {
                     LLMCapability.Thinking,
                     LLMCapability.MultipleChoices,
                     LLMCapability.Vision.Image,
+                    LLMCapability.Audio,
                 )
             ),
         )

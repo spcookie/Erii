@@ -182,6 +182,11 @@ class ConfigHolderImpl : ConfigProvider {
 
     override fun getVisionModel(): String = config.tryGetString("vision.model") ?: ""
 
+    override fun getSttApiKey(): String = config.tryGetString("stt.api-key") ?: ""
+    override fun getSttProvider(): String = config.tryGetString("stt.provider") ?: "none"
+    override fun getSttUrl(): String = config.tryGetString("stt.url") ?: ""
+    override fun getSttModel(): String = config.tryGetString("stt.model") ?: ""
+
     override fun isLlmProxyEnabled(): Boolean =
         if (config.hasPath("llm.proxy")) config.getBoolean("llm.proxy") else true
 

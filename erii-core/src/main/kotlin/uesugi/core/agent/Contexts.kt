@@ -39,6 +39,12 @@ data class SpeechConstraints(
     val forbiddenHints: MutableList<String> = mutableListOf()
 )
 
+data class AudioResource(
+    val bytes: ByteArray,
+    val format: String,
+    val fileName: String,
+)
+
 internal fun buildSpeechConstraints(
     emotion: EmotionalTendencies?,
     tone: Tone?,
@@ -354,6 +360,7 @@ data class Context(
     val admins: () -> List<String>,
     val memes: () -> Int,
     val meme: suspend (String) -> MemeResource?,
+    val audio: suspend (HistoryRecord) -> AudioResource?,
 ) {
 
     data class Transient(
@@ -553,6 +560,20 @@ internal fun buildContext(event: ProactiveSpeakEvent): Context {
                         groupId = record.groupId,
                         resourceId = record.resourceId,
                         bytes = bytes
+                    )
+                }
+            },
+            audio = { history ->
+                withContext(Dispatchers.IO) {
+                    val resourceId = history.resource?.id ?: return@withContext null
+                    val resource = resourceService.getResource(resourceId) ?: return@withContext null
+                    val bytes = objectStorage.get(resource.url.toPath())
+                        .buffer()
+                        .readByteArray()
+                    AudioResource(
+                        bytes = bytes,
+                        format = resource.fileName.substringAfterLast(".", "").lowercase(),
+                        fileName = resource.fileName,
                     )
                 }
             },

@@ -24,6 +24,9 @@ class OneBotMessagePlatformAdapter : MessagePlatformAdapter<GroupMessageEvent> {
         var isAtBot = false
         var imageUrl: String? = null
         var imageFormat: String? = null
+        var audioUrl: String? = null
+        var audioFormat: String? = null
+        var hasMedia = false
         var messageType = MessageType.TEXT
 
         val content = buildString {
@@ -37,12 +40,23 @@ class OneBotMessagePlatformAdapter : MessagePlatformAdapter<GroupMessageEvent> {
                     }
 
                     "image" -> {
-                        if (imageUrl == null) {
+                        if (!hasMedia) {
+                            hasMedia = true
                             messageType = MessageType.IMAGE
                             imageUrl = segment.imageUrl ?: segment.imageFile
-                            imageFormat = inferImageFormat(segment.imageFile ?: segment.imageUrl)
+                            imageFormat = inferMediaFormat(imageUrl, IMAGE_FORMATS)
                         }
                         append(segment.data["summary"]?.jsonPrimitive?.contentOrNull ?: "[图片]")
+                    }
+
+                    "record" -> {
+                        if (!hasMedia) {
+                            hasMedia = true
+                            messageType = MessageType.AUDIO
+                            audioUrl = segment.recordUrl ?: segment.recordFile
+                            audioFormat = inferMediaFormat(audioUrl, AUDIO_FORMATS)
+                        }
+                        append("[音频]")
                     }
 
                     "text" -> {
@@ -72,11 +86,13 @@ class OneBotMessagePlatformAdapter : MessagePlatformAdapter<GroupMessageEvent> {
             isAtBot = isAtBot,
             messageType = messageType,
             imageUrl = imageUrl,
-            imageFormat = imageFormat
+            imageFormat = imageFormat,
+            audioUrl = audioUrl,
+            audioFormat = audioFormat
         )
     }
 
-    private fun inferImageFormat(source: String?): String? {
+    private fun inferMediaFormat(source: String?, supportedFormats: Set<String>): String? {
         val cleanSource = source
             ?.substringBefore("?")
             ?.substringBefore("#")
@@ -87,12 +103,17 @@ class OneBotMessagePlatformAdapter : MessagePlatformAdapter<GroupMessageEvent> {
         }
         val extension = cleanSource.substringAfterLast(".", missingDelimiterValue = "")
             .lowercase()
-        return extension.takeIf { it in setOf("jpg", "jpeg", "png", "gif", "webp", "bmp") }
+        return extension.takeIf { it in supportedFormats }
+    }
+
+    private companion object {
+        val IMAGE_FORMATS = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+        val AUDIO_FORMATS = setOf("mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "webm", "amr", "silk")
     }
 }
 
 /**
- * 对字符串做 CQ 码 value 转义，与 Go 端 [unescapeCQValue] 配对。
+ * 对字符串做 CQ 码 value 转义。
  * `&` → `&amp;`, `[` → `&#91;`, `]` → `&#93;`, `,` → `&#44;`
  */
 internal fun String.toCQEscaped(): String = buildString {

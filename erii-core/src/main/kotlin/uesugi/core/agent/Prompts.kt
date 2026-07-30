@@ -33,14 +33,17 @@ import uesugi.core.state.memory.UserProfileEntity
 import uesugi.core.state.summary.SummaryEntity
 import kotlin.time.Clock
 
-internal suspend fun buildPrompt(context: Context): Prompt {
+internal suspend fun buildPrompt(
+    context: Context,
+    supportsVision: Boolean = LLMModelChoice.Pro.supports(LLMCapability.Vision.Image),
+    supportsAudio: Boolean = LLMModelChoice.Pro.supports(LLMCapability.Audio),
+): Prompt {
     val transient = context.toTransient()
     val constraints = buildConstraint(context, transient)
-    val supportsVision = LLMModelChoice.Pro.supports(LLMCapability.Vision.Image)
-    val objectStorage: ObjectStorage by ref()
-    val thumbnailService: ThumbnailService by ref()
 
     val imageSources = if (supportsVision) {
+        val objectStorage: ObjectStorage by ref()
+        val thumbnailService: ThumbnailService by ref()
         val imageHistories = transient.histories
             .filter { it.messageType == MessageType.IMAGE && context.currentBotId != it.userId }
         val lastImageId = imageHistories.lastOrNull()?.id
@@ -48,6 +51,14 @@ internal suspend fun buildPrompt(context: Context): Prompt {
             val useOriginal = history.id == lastImageId
             history.id to loadImageSource(history, objectStorage, thumbnailService, useOriginal)
         }
+    } else emptyMap()
+
+    val audioSources = if (supportsAudio) {
+        transient.histories
+            .filter { it.messageType == MessageType.AUDIO && context.currentBotId != it.userId }
+            .associate { history ->
+                history.id to loadAudioSource(context, history)
+            }
     } else emptyMap()
 
     return prompt("__bot_chat__") {
@@ -119,6 +130,16 @@ internal suspend fun buildPrompt(context: Context): Prompt {
                     val content = prefix + "[image_id:${history.id}] " + (history.content ?: "")
                     user(content)
                 }
+            } else if (history.messageType == MessageType.AUDIO) {
+                val audioSource = audioSources[history.id]
+                if (supportsAudio && audioSource != null) {
+                    user {
+                        text(prefix + "[音频]")
+                        audio(audioSource)
+                    }
+                } else {
+                    user(prefix + "[音频]")
+                }
             } else {
                 val content = buildString {
                     append(prefix)
@@ -162,9 +183,10 @@ private fun isMarkdown(text: String): Boolean {
 
 private fun buildBotToolCall(history: HistoryRecord, callId: String): MessagePart.Tool.Call? {
     return when (history.messageType) {
-        MessageType.TEXT, MessageType.IMAGE -> {
+        MessageType.TEXT, MessageType.IMAGE, MessageType.AUDIO -> {
             val text = when (history.messageType) {
                 MessageType.IMAGE -> "[图片]"
+                MessageType.AUDIO -> "[音频]"
                 else -> history.content ?: ""
             }
             val tool = if (isMarkdown(text)) "sendMarkdown" else "sendText"
@@ -207,6 +229,28 @@ private suspend fun loadImageSource(
         null
     }
 }
+
+private suspend fun loadAudioSource(
+    context: Context,
+    history: HistoryRecord,
+): AttachmentSource.Audio? {
+    val audio = try {
+        context.audio(history)
+    } catch (_: Exception) {
+        null
+    } ?: return null
+
+    val format = audio.format.lowercase()
+        .takeIf { it in AUDIO_FORMATS }
+        ?: return null
+    return AttachmentSource.Audio(
+        content = AttachmentContent.Binary.Bytes(audio.bytes),
+        format = format,
+        fileName = audio.fileName,
+    )
+}
+
+private val AUDIO_FORMATS = setOf("mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "webm", "amr", "silk")
 
 private fun extractImageFormat(fileName: String): String {
     return fileName.substringAfterLast(".", "")
@@ -367,7 +411,13 @@ fun MarkdownContentBuilder.buildHistoriesPrompt(histories: List<HistoryRecord>, 
                                 if (currentBotId == userId) "*" + BotManage.getBot(
                                     userId
                                 ).role.name else nick
-                            }]($userId): ${if (messageType == MessageType.IMAGE) "[image_id:$id]" else ""} $content"
+                            }]($userId): ${
+                                when (messageType) {
+                                    MessageType.IMAGE -> "[image_id:$id]"
+                                    MessageType.AUDIO -> "[音频]"
+                                    else -> ""
+                                }
+                            } ${if (messageType == MessageType.AUDIO) "" else content}"
                         )
                     }
                 }

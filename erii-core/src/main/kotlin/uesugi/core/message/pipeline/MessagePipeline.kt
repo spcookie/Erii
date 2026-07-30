@@ -7,7 +7,9 @@ import okio.Buffer
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.source
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uesugi.common.BotManage
 import uesugi.common.EventBus
@@ -24,7 +26,7 @@ import uesugi.core.route.CmdRuleRegister
 import uesugi.core.route.RouteCalledEvent
 import uesugi.core.route.RoutingAgent
 import java.io.File
-import java.net.URL
+import java.net.URI
 import java.util.*
 import kotlin.time.Clock
 import kotlin.uuid.ExperimentalUuidApi
@@ -49,61 +51,53 @@ class MessagePipeline(
     }
 
     @OptIn(ExperimentalUuidApi::class)
-    private suspend fun saveHistory(context: MessageContext): HistoryRecord {
+    internal suspend fun saveHistory(context: MessageContext): HistoryRecord {
         val parsed = context.parsedMessage
         return withContext(Dispatchers.IO) {
             var resource: ResourceRecord? = null
+            val media = parsed.imageUrl
+                ?.let { MediaSource(it, parsed.imageFormat, "image") }
+                ?: parsed.audioUrl?.let { MediaSource(it, parsed.audioFormat, "audio") }
 
-            if (parsed.imageUrl != null) {
-                val imageUrl = parsed.imageUrl!!
-                val format = parsed.imageFormat
-
-                val buffer = when {
-                    imageUrl.startsWith("base64://") -> {
-                        val data = Base64.getDecoder().decode(imageUrl.removePrefix("base64://"))
-                        Buffer().write(data).readByteString()
-                    }
-
-                    imageUrl.startsWith("file://") -> {
-                        val data = File(imageUrl.removePrefix("file://")).readBytes()
-                        Buffer().write(data).readByteString()
-                    }
-
-                    else -> {
-                        URL(imageUrl).openStream().use { input ->
-                            input.source().buffer().readByteString()
-                        }
-                    }
-                }
+            if (media != null) {
+                val buffer = readMedia(media.url)
                 val size = buffer.size.toLong()
                 val md5 = buffer.md5().hex()
+                val format = sanitizeFormat(media.format)
 
-                val resourceRecord = transaction {
-                    ResourceEntity.find { ResourceTable.md5 eq md5 }.firstOrNull()?.toRecord()
+                val matchingResources = transaction {
+                    ResourceEntity.find {
+                        (ResourceTable.md5 eq md5) and
+                                (ResourceTable.url like "./${media.directory}/%")
+                    }.map { it.toRecord() }
+                }
+                val groupResource = matchingResources.firstOrNull {
+                    it.botMark == context.botId && it.groupId == context.groupId
                 }
 
-                val path = if (resourceRecord != null) {
-                    resourceRecord.url
+                val path = if (matchingResources.isNotEmpty()) {
+                    matchingResources.first().url
                 } else {
-                    val newPath = "./image/${context.groupId}/${Uuid.random().toHexString()}.${format}"
+                    val newPath = "./${media.directory}/${context.groupId}/${Uuid.random().toHexString()}.$format"
                     storage.put(
                         newPath.toPath(),
-                        Buffer().write(buffer).inputStream().source()
+                        Buffer().write(buffer)
                     )
                     newPath
                 }
 
-                resource = resourceService.saveResource(
-                    ResourceRecord(
-                        botMark = context.botId,
-                        groupId = context.groupId,
-                        url = path,
-                        fileName = path.substringAfterLast("/"),
-                        size = size,
-                        md5 = md5,
-                        createdAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+                resource = groupResource
+                    ?: resourceService.saveResource(
+                        ResourceRecord(
+                            botMark = context.botId,
+                            groupId = context.groupId,
+                            url = path,
+                            fileName = path.substringAfterLast("/"),
+                            size = size,
+                            md5 = md5,
+                            createdAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+                        )
                     )
-                )
             }
 
             historyService.saveHistory(
@@ -119,6 +113,44 @@ class MessagePipeline(
                 )
             )
         }
+    }
+
+    private fun readMedia(source: String) = when {
+        source.startsWith("base64://") -> {
+            val data = Base64.getDecoder().decode(source.removePrefix("base64://"))
+            Buffer().write(data).readByteString()
+        }
+
+        source.startsWith("file://", ignoreCase = true) -> {
+            val file = runCatching { File(URI(source)) }
+                .getOrElse { File(source.substringAfter("file://")) }
+            Buffer().write(file.readBytes()).readByteString()
+        }
+
+        source.startsWith("http://", ignoreCase = true) ||
+                source.startsWith("https://", ignoreCase = true) -> {
+            URI(source).toURL().openStream().use { input ->
+                input.source().buffer().readByteString()
+            }
+        }
+
+        else -> error("Unsupported media source: $source")
+    }
+
+    private fun sanitizeFormat(format: String?): String =
+        format
+            ?.lowercase()
+            ?.takeIf { it.matches(SAFE_FORMAT) }
+            ?: "bin"
+
+    private data class MediaSource(
+        val url: String,
+        val format: String?,
+        val directory: String,
+    )
+
+    private companion object {
+        val SAFE_FORMAT = Regex("[a-z0-9]{1,10}")
     }
 
     private fun routeCall(context: MessageContext, roleName: String) {
