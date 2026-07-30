@@ -9,6 +9,7 @@ import uesugi.common.BotManage
 import uesugi.common.BotRole
 import uesugi.common.data.EmotionalTendencies
 import uesugi.common.data.HistoryRecord
+import uesugi.common.data.MessageType
 import uesugi.common.data.PAD
 import uesugi.common.event.InterruptionMode
 import uesugi.common.event.ProactiveSpeakEvent
@@ -18,6 +19,7 @@ import uesugi.core.component.storage.ObjectStorage
 import uesugi.core.message.history.HistoryService
 import uesugi.core.message.history.truncateContent
 import uesugi.core.message.resource.ResourceService
+import uesugi.core.message.resource.ThumbnailService
 import uesugi.core.rule.Rule
 import uesugi.core.rule.RuleManager
 import uesugi.core.state.emotion.*
@@ -38,6 +40,30 @@ data class SpeechConstraints(
     val styleHints: MutableList<String> = mutableListOf(),
     val forbiddenHints: MutableList<String> = mutableListOf()
 )
+
+data class MediaResource(
+    val bytes: ByteArray,
+    val format: String,
+    val fileName: String,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MediaResource) return false
+
+        if (!bytes.contentEquals(other.bytes)) return false
+        if (format != other.format) return false
+        if (fileName != other.fileName) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = bytes.contentHashCode()
+        result = 31 * result + format.hashCode()
+        result = 31 * result + fileName.hashCode()
+        return result
+    }
+}
 
 internal fun buildSpeechConstraints(
     emotion: EmotionalTendencies?,
@@ -354,6 +380,7 @@ data class Context(
     val admins: () -> List<String>,
     val memes: () -> Int,
     val meme: suspend (String) -> MemeResource?,
+    val mediaResource: suspend (HistoryRecord, Boolean) -> MediaResource?,
 ) {
 
     data class Transient(
@@ -401,6 +428,7 @@ internal fun buildContext(event: ProactiveSpeakEvent): Context {
     val flowGaugeManager: FlowGaugeManager by ref()
     val memoService: MemeService by ref()
     val objectStorage: ObjectStorage by ref()
+    val thumbnailService: ThumbnailService by ref()
     return transaction {
         Context(
             currentBotId = currentBotId,
@@ -553,6 +581,24 @@ internal fun buildContext(event: ProactiveSpeakEvent): Context {
                         groupId = record.groupId,
                         resourceId = record.resourceId,
                         bytes = bytes
+                    )
+                }
+            },
+            mediaResource = { history, useThumbnail ->
+                withContext(Dispatchers.IO) {
+                    val resourceId = history.resource?.id ?: return@withContext null
+                    val resource = resourceService.getResource(resourceId) ?: return@withContext null
+                    val bytes = if (useThumbnail && history.messageType == MessageType.IMAGE) {
+                        thumbnailService.getThumbnail(resource) ?: return@withContext null
+                    } else {
+                        objectStorage.get(resource.url.toPath())
+                            .buffer()
+                            .readByteArray()
+                    }
+                    MediaResource(
+                        bytes = bytes,
+                        format = resource.fileName.substringAfterLast(".", "").lowercase(),
+                        fileName = resource.fileName,
                     )
                 }
             },

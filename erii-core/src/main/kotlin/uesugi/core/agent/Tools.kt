@@ -7,6 +7,7 @@ import uesugi.common.ChatToolSet
 import uesugi.common.event.ProactiveSpeakEvent
 import uesugi.common.toolkit.ref
 import uesugi.core.component.search.WebSearchTool
+import uesugi.core.component.stt.ChatAudioTool
 import uesugi.core.component.vision.ChatVisionTool
 import uesugi.core.cron.CronService
 
@@ -15,6 +16,7 @@ data class ToolEnv(
     val webSearch: Boolean,
     val chatVision: Boolean,
     val multimodal: Boolean = false,
+    val nativeAudio: Boolean = false,
     val toolSetBuilder: ((ChatToolSet) -> List<ToolSet>)?,
     val ruleToolSet: RuleToolSet?,
     val cronToolSet: CronToolSet?
@@ -34,6 +36,9 @@ fun webTools() =
 context(env: ToolEnv)
 fun chatVision() =
     if (env.chatVision) ChatVisionTool(env.multimodal).asTools() else emptyList()
+
+context(env: ToolEnv)
+fun chatAudio() = ChatAudioTool(env.nativeAudio).asTools()
 
 
 context(env: ToolEnv)
@@ -58,6 +63,7 @@ fun buildToolRegistry(): ToolRegistry =
         tools(cronTools())
         tools(webTools())
         tools(chatVision())
+        tools(chatAudio())
         tools(extraTools())
     }
 
@@ -95,12 +101,18 @@ fun buildCronToolSet(event: ProactiveSpeakEvent): CronToolSet {
     )
 }
 
-fun buildToolEnv(event: ProactiveSpeakEvent, context: Context, multimodal: Boolean = false): ToolEnv {
+fun buildToolEnv(
+    event: ProactiveSpeakEvent,
+    context: Context,
+    multimodal: Boolean = false,
+    nativeAudio: Boolean = false,
+): ToolEnv {
     return ToolEnv(
         buildChatToolSet(event, context),
         event.chatVision,
         event.webSearch,
         multimodal,
+        nativeAudio,
         event.toolSetBuilder,
         buildRuleToolSet(event, context),
         buildCronToolSet(event)

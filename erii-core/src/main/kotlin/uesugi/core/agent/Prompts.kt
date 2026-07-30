@@ -15,17 +15,11 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import okio.Path.Companion.toPath
-import okio.buffer
 import uesugi.common.BotManage
 import uesugi.common.LLMModelChoice
 import uesugi.common.data.HistoryRecord
 import uesugi.common.data.MessageType
 import uesugi.common.toolkit.DateTimeFormat
-import uesugi.common.toolkit.ref
-import uesugi.core.component.storage.ObjectStorage
-import uesugi.core.message.resource.ResourceService
-import uesugi.core.message.resource.ThumbnailService
 import uesugi.core.rule.Rule
 import uesugi.core.state.evolution.LearnedVocabEntity
 import uesugi.core.state.memory.FactsEntity
@@ -33,21 +27,30 @@ import uesugi.core.state.memory.UserProfileEntity
 import uesugi.core.state.summary.SummaryEntity
 import kotlin.time.Clock
 
-internal suspend fun buildPrompt(context: Context): Prompt {
+internal suspend fun buildPrompt(
+    context: Context,
+    supportsVision: Boolean = LLMModelChoice.Pro.supports(LLMCapability.Vision.Image),
+    supportsAudio: Boolean = LLMModelChoice.Pro.supports(LLMCapability.Audio),
+): Prompt {
     val transient = context.toTransient()
     val constraints = buildConstraint(context, transient)
-    val supportsVision = LLMModelChoice.Pro.supports(LLMCapability.Vision.Image)
-    val objectStorage: ObjectStorage by ref()
-    val thumbnailService: ThumbnailService by ref()
 
     val imageSources = if (supportsVision) {
         val imageHistories = transient.histories
             .filter { it.messageType == MessageType.IMAGE && context.currentBotId != it.userId }
         val lastImageId = imageHistories.lastOrNull()?.id
         imageHistories.associate { history ->
-            val useOriginal = history.id == lastImageId
-            history.id to loadImageSource(history, objectStorage, thumbnailService, useOriginal)
+            val useThumbnail = history.id != lastImageId
+            history.id to loadImageSource(context, history, useThumbnail)
         }
+    } else emptyMap()
+
+    val audioSources = if (supportsAudio) {
+        transient.histories
+            .filter { it.messageType == MessageType.AUDIO && context.currentBotId != it.userId }
+            .associate { history ->
+                history.id to loadAudioSource(context, history)
+            }
     } else emptyMap()
 
     return prompt("__bot_chat__") {
@@ -87,6 +90,9 @@ internal suspend fun buildPrompt(context: Context): Prompt {
                     if (!supportsVision) {
                         line { text("图片：包含图片ID：image_id") }
                     }
+                    if (!supportsAudio) {
+                        line { text("音频：包含音频ID：audio_id；需要理解音频内容时调用 transcribeAudio。") }
+                    }
                 }
             }
         }
@@ -118,6 +124,16 @@ internal suspend fun buildPrompt(context: Context): Prompt {
                 } else {
                     val content = prefix + "[image_id:${history.id}] " + (history.content ?: "")
                     user(content)
+                }
+            } else if (history.messageType == MessageType.AUDIO) {
+                val audioSource = audioSources[history.id]
+                if (supportsAudio && audioSource != null) {
+                    user {
+                        text(prefix + "[音频]")
+                        audio(audioSource)
+                    }
+                } else {
+                    user(prefix + "[audio_id:${history.id}] [音频]")
                 }
             } else {
                 val content = buildString {
@@ -162,9 +178,10 @@ private fun isMarkdown(text: String): Boolean {
 
 private fun buildBotToolCall(history: HistoryRecord, callId: String): MessagePart.Tool.Call? {
     return when (history.messageType) {
-        MessageType.TEXT, MessageType.IMAGE -> {
+        MessageType.TEXT, MessageType.IMAGE, MessageType.AUDIO -> {
             val text = when (history.messageType) {
                 MessageType.IMAGE -> "[图片]"
+                MessageType.AUDIO -> "[音频]"
                 else -> history.content ?: ""
             }
             val tool = if (isMarkdown(text)) "sendMarkdown" else "sendText"
@@ -182,37 +199,45 @@ private fun buildBotToolCall(history: HistoryRecord, callId: String): MessagePar
 }
 
 private suspend fun loadImageSource(
+    context: Context,
     history: HistoryRecord,
-    objectStorage: ObjectStorage,
-    thumbnailService: ThumbnailService,
-    useOriginal: Boolean = false
+    useThumbnail: Boolean = false,
 ): AttachmentSource.Image? {
-    val resource = history.resource ?: return null
-    val resourceService: ResourceService by ref()
-
-    return try {
-        val fullResource = resourceService.getResource(resource.id ?: return null) ?: return null
-        val bytes = if (useOriginal) {
-            objectStorage.get(fullResource.url.toPath()).buffer().readByteArray()
-        } else {
-            thumbnailService.getThumbnail(fullResource) ?: return null
-        }
-        val format = extractImageFormat(fullResource.fileName)
-        AttachmentSource.Image(
-            content = AttachmentContent.Binary.Bytes(bytes),
-            format = format,
-            fileName = fullResource.fileName
-        )
-    } catch (_: Exception) {
-        null
-    }
+    val image = loadMediaResource(context, history, useThumbnail) ?: return null
+    return AttachmentSource.Image(
+        content = AttachmentContent.Binary.Bytes(image.bytes),
+        format = image.format.ifBlank { "png" },
+        fileName = image.fileName,
+    )
 }
 
-private fun extractImageFormat(fileName: String): String {
-    return fileName.substringAfterLast(".", "")
-        .lowercase()
-        .takeIf { it.isNotEmpty() } ?: "png"
+private suspend fun loadAudioSource(
+    context: Context,
+    history: HistoryRecord,
+): AttachmentSource.Audio? {
+    val audio = loadMediaResource(context, history, useThumbnail = false) ?: return null
+
+    val format = audio.format.lowercase()
+        .takeIf { it in AUDIO_FORMATS }
+        ?: return null
+    return AttachmentSource.Audio(
+        content = AttachmentContent.Binary.Bytes(audio.bytes),
+        format = format,
+        fileName = audio.fileName,
+    )
 }
+
+private suspend fun loadMediaResource(
+    context: Context,
+    history: HistoryRecord,
+    useThumbnail: Boolean,
+): MediaResource? = try {
+    context.mediaResource(history, useThumbnail)
+} catch (_: Exception) {
+    null
+}
+
+private val AUDIO_FORMATS = setOf("mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "webm", "amr", "silk")
 
 private fun MarkdownContentBuilder.buildStableSystemPrompt(context: Context) {
     text(context.botRole.personality(context.currentBotId))
@@ -367,7 +392,13 @@ fun MarkdownContentBuilder.buildHistoriesPrompt(histories: List<HistoryRecord>, 
                                 if (currentBotId == userId) "*" + BotManage.getBot(
                                     userId
                                 ).role.name else nick
-                            }]($userId): ${if (messageType == MessageType.IMAGE) "[image_id:$id]" else ""} $content"
+                            }]($userId): ${
+                                when (messageType) {
+                                    MessageType.IMAGE -> "[image_id:$id]"
+                                    MessageType.AUDIO -> "[音频]"
+                                    else -> ""
+                                }
+                            } ${if (messageType == MessageType.AUDIO) "" else content}"
                         )
                     }
                 }

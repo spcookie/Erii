@@ -301,6 +301,10 @@ interface ConfigProvider {
     fun getVisionProvider(): String
     fun getVisionUrl(): String
     fun getVisionModel(): String
+    fun getSttApiKey(): String
+    fun getSttProvider(): String
+    fun getSttUrl(): String
+    fun getSttModel(): String
 
     // ===== 代理 =====
     fun getProxyHttp(): String?
@@ -393,6 +397,10 @@ object ConfigHolder {
     fun getVisionProvider(): String = provider.getVisionProvider()
     fun getVisionUrl(): String = provider.getVisionUrl()
     fun getVisionModel(): String = provider.getVisionModel()
+    fun getSttApiKey(): String = provider.getSttApiKey()
+    fun getSttProvider(): String = provider.getSttProvider()
+    fun getSttUrl(): String = provider.getSttUrl()
+    fun getSttModel(): String = provider.getSttModel()
 
     // ===== 代理 =====
     fun getProxyHttp(): String? = provider.getProxyHttp()

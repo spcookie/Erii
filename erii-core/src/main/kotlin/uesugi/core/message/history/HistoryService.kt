@@ -50,15 +50,16 @@ class HistoryService {
                 this.nick = history.nick
                 this.messageType = history.messageType
                 this.resource = history.resource?.let { resource ->
-                    ResourceEntity.new {
-                        this.botMark = history.botMark
-                        this.groupId = history.groupId
-                        this.url = resource.url
-                        this.fileName = resource.fileName
-                        this.size = resource.size
-                        this.md5 = resource.md5
-                        this.createdAt = resource.createdAt
-                    }
+                    resource.id?.let(ResourceEntity::findById)
+                        ?: ResourceEntity.new {
+                            this.botMark = history.botMark
+                            this.groupId = history.groupId
+                            this.url = resource.url
+                            this.fileName = resource.fileName
+                            this.size = resource.size
+                            this.md5 = resource.md5
+                            this.createdAt = resource.createdAt
+                        }
                 }
                 this.content = history.content
             }.toRecord()
