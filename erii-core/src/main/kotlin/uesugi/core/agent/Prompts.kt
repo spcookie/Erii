@@ -129,7 +129,7 @@ internal suspend fun buildPrompt(
                 val audioSource = audioSources[history.id]
                 if (supportsAudio && audioSource != null) {
                     user {
-                        text(prefix + "[音频]")
+                        text("$prefix[音频]")
                         audio(audioSource)
                     }
                 } else {
