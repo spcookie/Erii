@@ -109,7 +109,7 @@ func NewBrowserModel(onSelect func(pluginName string, pluginPath string), onBack
 func (m *BrowserModel) loadPlugins() {
 	m.plugins = []Item{}
 
-	// Load from plugin-config directory
+	// Load from the plugin configuration directory.
 	dir := path.PluginConfigDir
 	if stat, err := os.Stat(dir); err == nil && stat.IsDir() {
 		entries, err := os.ReadDir(dir)

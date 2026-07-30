@@ -270,7 +270,7 @@ func SaveDesc(nodePath, desc string) error {
 
 // SaveDescForPlugin updates a description in the selected metadata namespace.
 // Main config descriptions are persisted to .conf/desc.json; plugin descriptions
-// are persisted to .conf/plugin-config/schema/<plugin>.json under __desc__.
+// are persisted to .conf/schema/<plugin>.json under __desc__.
 func SaveDescForPlugin(pluginName, nodePath, desc string) error {
 	if GlobalMetadata == nil {
 		GlobalMetadata = &Metadata{
