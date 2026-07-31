@@ -17,7 +17,7 @@ class ResourceService {
     fun saveResource(resource: ResourceRecord): ResourceRecord {
         return transaction {
             ResourceEntity.new {
-                botMark = resource.botMark
+                botId = resource.botId
                 groupId = resource.groupId
                 url = resource.url
                 fileName = resource.fileName
@@ -35,24 +35,24 @@ class ResourceService {
     }
 
     fun getAllResourcesByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         offset: Int = 0,
         limit: Int = 500
     ): Pair<List<ResourceRecord>, Int> = getAllResourcesByGroup(
-        botMark,
+        botId,
         groupId,
         ManageListQuery(offset = offset, limit = limit)
     )
 
     fun getAllResourcesByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         listQuery: ManageListQuery
     ): Pair<List<ResourceRecord>, Int> {
         return transaction {
             var condition: Op<Boolean> =
-                (ResourceTable.botMark eq botMark) and (ResourceTable.groupId eq groupId)
+                (ResourceTable.botId eq botId) and (ResourceTable.groupId eq groupId)
             if (listQuery.search.isNotBlank()) {
                 condition = condition and (
                         (ResourceTable.fileName.lowerCase() like listQuery.searchPattern) or

@@ -18,32 +18,32 @@ import kotlin.time.Clock
  * 摘要仓库 - 负责摘要相关的数据库操作
  */
 class SummaryRepository {
-    fun findGroupsNeedProcessing(botMark: String): List<String> = transaction {
+    fun findGroupsNeedProcessing(botId: String): List<String> = transaction {
         val allGroupIds = HistoryTable
             .select(HistoryTable.groupId)
-            .where { HistoryTable.botMark eq botMark }
+            .where { HistoryTable.botId eq botId }
             .groupBy(HistoryTable.groupId)
             .map { it[HistoryTable.groupId] }
             .distinct()
 
         allGroupIds.filter { groupId ->
             val summaryState = SummaryStateEntity.find(
-                (SummaryStateTable.botMark eq botMark) and (SummaryStateTable.groupId eq groupId)
+                (SummaryStateTable.botId eq botId) and (SummaryStateTable.groupId eq groupId)
             ).firstOrNull()
 
             val lastProcessedId = summaryState?.lastProcessedHistoryId ?: 0
             HistoryEntity.count(
-                (HistoryTable.botMark eq botMark) and
+                (HistoryTable.botId eq botId) and
                         (HistoryTable.groupId eq groupId) and
                         (HistoryTable.id greater lastProcessedId)
             ) > 0
         }
     }
 
-    fun latestHistoryId(botMark: String, groupId: String): Int? = transaction {
+    fun latestHistoryId(botId: String, groupId: String): Int? = transaction {
         HistoryTable
             .select(HistoryTable.id)
-            .where { (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId) }
+            .where { (HistoryTable.botId eq botId) and (HistoryTable.groupId eq groupId) }
             .orderBy(HistoryTable.id to SortOrder.DESC)
             .limit(1)
             .firstOrNull()
@@ -51,20 +51,20 @@ class SummaryRepository {
             ?.value
     }
 
-    fun getSummaryState(botMark: String, groupId: String): SummaryStateRecord? = transaction {
+    fun getSummaryState(botId: String, groupId: String): SummaryStateRecord? = transaction {
         SummaryStateEntity.find(
-            (SummaryStateTable.botMark eq botMark) and (SummaryStateTable.groupId eq groupId)
+            (SummaryStateTable.botId eq botId) and (SummaryStateTable.groupId eq groupId)
         ).firstOrNull()?.toRecord()
     }
 
     fun getHistoriesToProcess(
-        botMark: String,
+        botId: String,
         groupId: String,
         lastHistoryId: Int,
         limit: Int
     ): List<HistoryRecord> = transaction {
         HistoryEntity.find(
-            (HistoryTable.botMark eq botMark) and
+            (HistoryTable.botId eq botId) and
                     (HistoryTable.groupId eq groupId) and
                     (HistoryTable.id greater lastHistoryId)
         )
@@ -78,9 +78,9 @@ class SummaryRepository {
      *
      * 用于尚未建立处理游标的群组：只处理最新窗口，更早历史作为基线数据跳过。
      */
-    fun getLatestHistories(botMark: String, groupId: String, limit: Int): List<HistoryRecord> = transaction {
+    fun getLatestHistories(botId: String, groupId: String, limit: Int): List<HistoryRecord> = transaction {
         HistoryEntity.find(
-            (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId)
+            (HistoryTable.botId eq botId) and (HistoryTable.groupId eq groupId)
         )
             .orderBy(HistoryTable.id to SortOrder.DESC)
             .limit(limit)
@@ -88,11 +88,11 @@ class SummaryRepository {
             .asReversed()
     }
 
-    fun updateSummaryState(botMark: String, groupId: String, lastHistoryId: Int) {
+    fun updateSummaryState(botId: String, groupId: String, lastHistoryId: Int) {
         transaction {
             val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
             val existing = SummaryStateEntity.find(
-                (SummaryStateTable.botMark eq botMark) and (SummaryStateTable.groupId eq groupId)
+                (SummaryStateTable.botId eq botId) and (SummaryStateTable.groupId eq groupId)
             ).firstOrNull()
 
             if (existing != null) {
@@ -100,7 +100,7 @@ class SummaryRepository {
                 existing.lastProcessedAt = now
             } else {
                 SummaryStateEntity.new {
-                    this.botMark = botMark
+                    this.botId = botId
                     this.groupId = groupId
                     this.lastProcessedHistoryId = lastHistoryId
                     this.lastProcessedAt = now
@@ -113,7 +113,7 @@ class SummaryRepository {
      * 保存对话摘要
      */
     fun saveSummary(
-        botMark: String,
+        botId: String,
         groupId: String,
         timeRange: String,
         content: String,
@@ -124,7 +124,7 @@ class SummaryRepository {
     ) {
         transaction {
             SummaryEntity.new {
-                this.botMark = botMark
+                this.botId = botId
                 this.groupId = groupId
                 this.timeRange = timeRange
                 this.content = content
@@ -137,23 +137,23 @@ class SummaryRepository {
     }
 
     fun getSummariesByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
     ): Pair<List<SummaryRecord>, Int> = getSummariesByGroup(
-        botMark,
+        botId,
         groupId,
         ManageListQuery(offset = offset, limit = limit)
     )
 
     fun getSummariesByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         listQuery: ManageListQuery
     ): Pair<List<SummaryRecord>, Int> = transaction {
         var condition: Op<Boolean> =
-            (SummaryTable.botMark eq botMark) and (SummaryTable.groupId eq groupId)
+            (SummaryTable.botId eq botId) and (SummaryTable.groupId eq groupId)
         if (listQuery.search.isNotBlank()) {
             condition = condition and (
                     (SummaryTable.timeRange.lowerCase() like listQuery.searchPattern) or
@@ -185,9 +185,9 @@ class SummaryRepository {
     /**
      * 获取最近一条摘要，用于生成下一段摘要时提供上下文
      */
-    fun getLatestSummary(botMark: String, groupId: String): SummaryRecord? = transaction {
+    fun getLatestSummary(botId: String, groupId: String): SummaryRecord? = transaction {
         SummaryEntity.find {
-            (SummaryTable.botMark eq botMark) and (SummaryTable.groupId eq groupId)
+            (SummaryTable.botId eq botId) and (SummaryTable.groupId eq groupId)
         }.orderBy(SummaryTable.createdAt to SortOrder.DESC).limit(1).firstOrNull()?.toRecord()
     }
 

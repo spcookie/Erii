@@ -44,7 +44,7 @@ class HistoryContentTruncationTest {
     }
 
     private fun historyRecord(content: String?) = HistoryRecord(
-        botMark = "bot",
+        botId = "bot",
         groupId = "group",
         userId = "user",
         nick = "nick",

@@ -134,7 +134,7 @@ class MemoryJob(
         force: Boolean
     ): StateWorkResult = UsageContext.withUsage(key.botId, key.groupId) {
         memoryService.processGroupMemory(
-            botMark = key.botId,
+            botId = key.botId,
             groupId = key.groupId,
             batchLimit = policy.batchLimit,
             minimumMessages = policy.minMessages,

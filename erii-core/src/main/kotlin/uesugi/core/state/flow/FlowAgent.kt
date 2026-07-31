@@ -151,16 +151,16 @@ class FlowAgent {
     }
 
     @OptIn(ExperimentalTime::class)
-    suspend fun analysis(messages: List<FlowMessage>, botMark: String, groupId: String): Boolean {
+    suspend fun analysis(messages: List<FlowMessage>, botId: String, groupId: String): Boolean {
         if (messages.isEmpty()) return true
 
         val promptExecutor by GlobalContext.get().inject<PromptExecutor>()
 
         val messagesText = messages.joinToString("\n") { it.asLlmPrompt() }
 
-        val currentTopic = loadCurrentTopic(botMark, groupId)
+        val currentTopic = loadCurrentTopic(botId, groupId)
 
-        val botInterests = BotManage.getBot(botMark).role.character
+        val botInterests = BotManage.getBot(botId).role.character
 
         val prompt = prompt("__flow_analysis__", LLMParams(maxTokens = 65536)) {
             system(
@@ -218,11 +218,11 @@ class FlowAgent {
 
             val result = response.getOrThrow().data
 
-            persistAnalysisResult(botMark, groupId, result)
+            persistAnalysisResult(botId, groupId, result)
 
-            triggerFlowEvents(result, botMark, groupId)
+            triggerFlowEvents(result, botId, groupId)
 
-            log.info("Flow analysis completed, botId=$botMark, groupId=$groupId, $result")
+            log.info("Flow analysis completed, botId=$botId, groupId=$groupId, $result")
             true
         } catch (e: Exception) {
             log.error("Flow analysis failed, groupId=$groupId", e)
@@ -230,7 +230,7 @@ class FlowAgent {
         }
     }
 
-    private fun triggerFlowEvents(result: FlowAnalysisResult, botMark: String, groupId: String) {
+    private fun triggerFlowEvents(result: FlowAnalysisResult, botId: String, groupId: String) {
         val tuning = ConfigHolder.getStateTuning().flow
         result.flowSuggestions.shouldCharge
             .distinct()
@@ -238,7 +238,7 @@ class FlowAgent {
                 when (eventType) {
                     ChargeEventType.CoreInterest -> if (result.interestMatch.hit) EventBus.postAsync(
                         CoreInterestEvent(
-                            botMark,
+                            botId,
                             groupId,
                             (result.interestMatch.score / 50.0).coerceIn(0.0, 1.0)
                         )
@@ -249,18 +249,18 @@ class FlowAgent {
                         result.groupResonance.participants >= 2
                     ) EventBus.postAsync(
                         GroupResonanceEvent(
-                            botMark,
+                            botId,
                             groupId,
                             result.groupResonance.arousal.coerceIn(-1.0, 1.0)
                         )
                     )
 
                     ChargeEventType.DeepReply -> if (result.interactionQuality.deepReplies) EventBus.postAsync(
-                        DeepReplyEvent(botMark, groupId, tuning.deepReplyBaseCharge)
+                        DeepReplyEvent(botId, groupId, tuning.deepReplyBaseCharge)
                     )
                     ChargeEventType.ContinuousInteraction -> EventBus.postAsync(
                         ContinuousInteractionEvent(
-                            botMark,
+                            botId,
                             groupId
                         )
                     )
@@ -283,17 +283,17 @@ class FlowAgent {
         drainEvents.forEach { eventType ->
             when (eventType) {
                 DrainEventType.TopicInterrupt -> EventBus.postAsync(
-                    TopicInterruptEvent(botMark, groupId, tuning.topicInterruptPenalty)
+                    TopicInterruptEvent(botId, groupId, tuning.topicInterruptPenalty)
                 )
 
-                DrainEventType.Negative -> EventBus.postAsync(NegativeEvent(botMark, groupId, tuning.negativePenalty))
+                DrainEventType.Negative -> EventBus.postAsync(NegativeEvent(botId, groupId, tuning.negativePenalty))
                 DrainEventType.RepeatTopic -> EventBus.postAsync(
-                    RepeatTopicEvent(botMark, groupId, tuning.repeatTopicPenalty)
+                    RepeatTopicEvent(botId, groupId, tuning.repeatTopicPenalty)
                 )
 
                 DrainEventType.LowActivity -> EventBus.postAsync(
                     LowActivityEvent(
-                        botMark,
+                        botId,
                         groupId,
                         tuning.lowActivityPenalty
                     )
@@ -302,19 +302,19 @@ class FlowAgent {
         }
     }
 
-    private fun loadCurrentTopic(botMark: String, groupId: String): String {
+    private fun loadCurrentTopic(botId: String, groupId: String): String {
         return transaction {
             FlowStateEntity.find {
-                (FlowStateTable.botMark eq botMark) and (FlowStateTable.groupId eq groupId)
+                (FlowStateTable.botId eq botId) and (FlowStateTable.groupId eq groupId)
             }.firstOrNull()?.currentTopic ?: ""
         }
     }
 
-    private suspend fun persistAnalysisResult(botMark: String, groupId: String, result: FlowAnalysisResult) {
+    private suspend fun persistAnalysisResult(botId: String, groupId: String, result: FlowAnalysisResult) {
         withContext(Dispatchers.IO) {
             transaction {
                 val flowState = FlowStateEntity.find {
-                    (FlowStateTable.botMark eq botMark) and (FlowStateTable.groupId eq groupId)
+                    (FlowStateTable.botId eq botId) and (FlowStateTable.groupId eq groupId)
                 }.orderBy(FlowStateTable.lastProcessedAt to SortOrder.DESC).firstOrNull()
 
                 flowState?.currentTopic = result.topicAnalysis.revisedTopic

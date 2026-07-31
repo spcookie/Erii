@@ -23,7 +23,7 @@ import uesugi.core.state.emotion.EmotionTable.DEFAULT_LENGTH
  * - createdAt: 创建时间
  */
 object UserProfileTable : IntIdTable("memory_user_profile") {
-    val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+    val botId = varchar("bot_id", length = DEFAULT_LENGTH)
     val groupId = varchar("group_id", length = DEFAULT_LENGTH)
     val userId = varchar("user_id", length = 64)
     val profile = text("profile")
@@ -37,7 +37,7 @@ object UserProfileTable : IntIdTable("memory_user_profile") {
 class UserProfileEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<UserProfileEntity>(UserProfileTable)
 
-    var botMark by UserProfileTable.botMark
+    var botId by UserProfileTable.botId
     var groupId by UserProfileTable.groupId
     var userId by UserProfileTable.userId
     var profile by UserProfileTable.profile
@@ -51,7 +51,7 @@ class UserProfileEntity(id: EntityID<Int>) : IntEntity(id) {
 @Serializable
 data class UserProfileRecord(
     var id: Int,
-    var botMark: String,
+    var botId: String,
     var groupId: String,
     var userId: String,
     var profile: String,
@@ -64,7 +64,7 @@ data class UserProfileRecord(
  */
 fun UserProfileEntity.toRecord(): UserProfileRecord = UserProfileRecord(
     id = id.value,
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     userId = userId,
     profile = profile,

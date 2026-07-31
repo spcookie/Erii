@@ -113,7 +113,7 @@ class ImagePromptTest {
 
     private fun imageHistory(id: Int = 1) = HistoryRecord(
         id = id,
-        botMark = "bot-a",
+        botId = "bot-a",
         groupId = "group-a",
         userId = "user-a",
         nick = "Alice",
@@ -121,7 +121,7 @@ class ImagePromptTest {
         content = "[图片]",
         resource = ResourceRecord(
             id = id + 9,
-            botMark = "bot-a",
+            botId = "bot-a",
             groupId = "group-a",
             url = "./image/group-a/cat.png",
             fileName = "cat.png",

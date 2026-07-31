@@ -29,7 +29,7 @@ import uesugi.common.toolkit.LocalDateTimeAsDateSerializer
  * 3. 检测话题切换时机
  */
 object FlowStateTable : IntIdTable("flow_state") {
-    val botMark = varchar("bot_mark", length = 64)
+    val botId = varchar("bot_id", length = 64)
     val groupId = varchar("group_id", length = 64)
     val lastProcessedHistoryId = integer("last_processed_history_id").default(0)
     val lastProcessedAt = datetime("last_processed_at")
@@ -45,7 +45,7 @@ object FlowStateTable : IntIdTable("flow_state") {
 class FlowStateEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<FlowStateEntity>(FlowStateTable)
 
-    var botMark by FlowStateTable.botMark
+    var botId by FlowStateTable.botId
     var groupId by FlowStateTable.groupId
     var lastProcessedHistoryId by FlowStateTable.lastProcessedHistoryId
     var lastProcessedAt by FlowStateTable.lastProcessedAt
@@ -60,7 +60,7 @@ class FlowStateEntity(id: EntityID<Int>) : IntEntity(id) {
 @Serializable
 data class FlowStateRecord(
     val id: Int,
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val lastProcessedHistoryId: Int,
     val lastProcessedAt: LocalDateTime,
@@ -74,7 +74,7 @@ data class FlowStateRecord(
  */
 fun FlowStateEntity.toRecord(): FlowStateRecord = FlowStateRecord(
     id = id.value,
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     lastProcessedHistoryId = lastProcessedHistoryId,
     lastProcessedAt = lastProcessedAt,

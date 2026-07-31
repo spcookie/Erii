@@ -67,14 +67,14 @@ class VolitionJob(
         }
     }
 
-    private fun ensureVolitionGaugeExists(botMark: String, groupId: String) {
+    private fun ensureVolitionGaugeExists(botId: String, groupId: String) {
         val volitionGaugeManager = GlobalContext.get().get<VolitionGaugeManager>()
-        volitionGaugeManager.getOrCreate(botMark, groupId, BotManage.getBot(botMark).role.emoticon)
+        volitionGaugeManager.getOrCreate(botId, groupId, BotManage.getBot(botId).role.emoticon)
     }
 
     @OptIn(ExperimentalTime::class)
     private suspend fun processGroupVolition(
-        botMark: String,
+        botId: String,
         groupId: String,
         policy: StateWorkPolicy,
         force: Boolean
@@ -83,12 +83,12 @@ class VolitionJob(
 
         try {
             val volitionState = withContext(Dispatchers.IO) {
-                volitionRepository.getVolitionState(botMark, groupId)
+                volitionRepository.getVolitionState(botId, groupId)
             }
             val lastId = volitionState?.lastProcessedHistoryId ?: 0
 
             val histories = withContext(Dispatchers.IO) {
-                volitionRepository.getLatestHistoriesToProcess(botMark, groupId, lastId, policy.batchLimit)
+                volitionRepository.getLatestHistoriesToProcess(botId, groupId, lastId, policy.batchLimit)
             }
 
             if (histories.isEmpty() || (!force && histories.size < policy.minMessages)) {
@@ -101,7 +101,7 @@ class VolitionJob(
             val messages = histories.map {
                 VolitionMessage(
                     id = it.id.value,
-                    botId = botMark,
+                    botId = botId,
                     groupId = it.groupId,
                     userId = it.userId,
                     time = it.createdAt,
@@ -113,19 +113,19 @@ class VolitionJob(
                 log.debug("群组 $groupId 消息转换后为空, 跳过处理")
                 val maxHistoryId = histories.maxOf { it.id.value }
                 withContext(Dispatchers.IO) {
-                    volitionRepository.updateVolitionState(botMark, groupId, maxHistoryId)
+                    volitionRepository.updateVolitionState(botId, groupId, maxHistoryId)
                 }
                 return StateWorkResult(histories.size, maxHistoryId, hasMore = false)
             }
 
-            val success = analyze(botMark, groupId, messages)
+            val success = analyze(botId, groupId, messages)
             if (!success) {
-                throw IllegalStateException("Volition analysis failed, botId=$botMark, groupId=$groupId")
+                throw IllegalStateException("Volition analysis failed, botId=$botId, groupId=$groupId")
             }
 
             val maxHistoryId = histories.maxOf { it.id.value }
             withContext(Dispatchers.IO) {
-                volitionRepository.updateVolitionState(botMark, groupId, maxHistoryId)
+                volitionRepository.updateVolitionState(botId, groupId, maxHistoryId)
             }
 
             log.debug("群组 $groupId 主动意愿处理完成, 最大 historyId=$maxHistoryId")
@@ -138,30 +138,30 @@ class VolitionJob(
     }
 
     private suspend fun analyze(
-        botMark: String,
+        botId: String,
         groupId: String,
         messages: List<VolitionMessage>
     ): Boolean {
         val volitionGaugeManager = GlobalContext.get().get<VolitionGaugeManager>()
-        val gauge = volitionGaugeManager.get(botMark, groupId) ?: return false
+        val gauge = volitionGaugeManager.get(botId, groupId) ?: return false
 
         gauge.state.lastActiveTime = messages.maxOf { it.time }
             .toInstant(TimeZone.currentSystemDefault())
             .toEpochMilliseconds()
 
-        val botInterests = BotManage.getBot(botMark).role.character
+        val botInterests = BotManage.getBot(botId).role.character
 
         val result = volitionAgent.analysis(messages, botInterests, gauge.getMood()) ?: return false
         val tuning = ConfigHolder.getStateTuning().volition
 
-        log.info("Impulsive value analysis completed, botId=$botMark, groupId=$groupId, $result")
+        log.info("Impulsive value analysis completed, botId=$botId, groupId=$groupId, $result")
 
-        EventBus.postAsync(ResetStimulusEvent(botMark, groupId, tuning.resetStimulusAmount))
+        EventBus.postAsync(ResetStimulusEvent(botId, groupId, tuning.resetStimulusAmount))
 
         if (result.keywordHit) {
             EventBus.postAsync(
                 KeywordHitEvent(
-                    botMark,
+                    botId,
                     groupId,
                     result.keywordStrength.coerceIn(0.0, 1.0) * tuning.keywordHitMaxStimulus
                 )
@@ -169,15 +169,15 @@ class VolitionJob(
         }
 
         if (result.isBusy) {
-            EventBus.postAsync(BusyGroupEvent(botMark, groupId, tuning.busyGroupStimulus))
+            EventBus.postAsync(BusyGroupEvent(botId, groupId, tuning.busyGroupStimulus))
         }
 
         if (result.indirectMention) {
-            EventBus.postAsync(IndirectMentionEvent(botMark, groupId, tuning.indirectMentionStimulus))
+            EventBus.postAsync(IndirectMentionEvent(botId, groupId, tuning.indirectMentionStimulus))
         }
 
         if (result.emotionalResonance) {
-            EventBus.postAsync(EmotionalResonanceEvent(botMark, groupId, tuning.emotionalResonanceStimulus))
+            EventBus.postAsync(EmotionalResonanceEvent(botId, groupId, tuning.emotionalResonanceStimulus))
         }
 
         return true
@@ -205,15 +205,15 @@ class VolitionJob(
     private fun triggerDailySpeak() {
         val volitionGaugeManager = GlobalContext.get().get<VolitionGaugeManager>()
         volitionGaugeManager.getAllGauges().forEach { (key, _) ->
-            val (botMark, groupId) = key.split(":")
-            val configKey = BotManage.getConfigKey(botMark)
+            val (botId, groupId) = key.split(":")
+            val configKey = BotManage.getConfigKey(botId)
             val effectiveGroups = ConfigHolder.getEffectiveEnableGroups(configKey)
             val effectiveRedirect = ConfigHolder.getEffectiveMessageRedirectMap(configKey)
             if (effectiveGroups.contains(groupId)) {
                 val groupId = effectiveRedirect.getOrDefault(groupId, groupId)
                 log.info("Decision: Group $groupId speaks regularly")
                 speakV(
-                    botId = botMark,
+                    botId = botId,
                     groupId = groupId,
                     interruptionMode = InterruptionMode.Routine
                 )
@@ -231,8 +231,8 @@ class VolitionJob(
                 val now = System.currentTimeMillis()
 
                 volitionGaugeManager.getAllGauges().forEach { (key, gauge) ->
-                    val (botMark, groupId) = key.split(":")
-                    val configKey = BotManage.getConfigKey(botMark)
+                    val (botId, groupId) = key.split(":")
+                    val configKey = BotManage.getConfigKey(botId)
                     val effectiveGroups = ConfigHolder.getEffectiveEnableGroups(configKey)
                     val effectiveRedirect = ConfigHolder.getEffectiveMessageRedirectMap(configKey)
                     if (effectiveGroups.contains(groupId)) {
@@ -246,7 +246,7 @@ class VolitionJob(
                             if (inRange) {
                                 log.info("Decision: No message from group $groupId within 4 hours, take the initiative to speak")
                                 speakV(
-                                    botId = botMark,
+                                    botId = botId,
                                     groupId = groupId
                                 )
                             }

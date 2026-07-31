@@ -26,7 +26,7 @@ import uesugi.core.state.emotion.EmotionTable.DEFAULT_LENGTH
  * - messageCount: 消息总数
  */
 object SummaryTable : IntIdTable("memory_summary") {
-    val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+    val botId = varchar("bot_id", length = DEFAULT_LENGTH)
     val groupId = varchar("group_id", length = DEFAULT_LENGTH)
     val timeRange = varchar("time_range", length = 50)
     val content = text("content")
@@ -38,7 +38,7 @@ object SummaryTable : IntIdTable("memory_summary") {
 }
 
 object SummaryStateTable : IntIdTable("summary_state") {
-    val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+    val botId = varchar("bot_id", length = DEFAULT_LENGTH)
     val groupId = varchar("group_id", length = DEFAULT_LENGTH)
     val lastProcessedHistoryId = integer("last_processed_history_id").default(0)
     val lastProcessedAt = datetime("last_processed_at")
@@ -51,7 +51,7 @@ object SummaryStateTable : IntIdTable("summary_state") {
 class SummaryEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<SummaryEntity>(SummaryTable)
 
-    var botMark by SummaryTable.botMark
+    var botId by SummaryTable.botId
     var groupId by SummaryTable.groupId
     var timeRange by SummaryTable.timeRange
     var content by SummaryTable.content
@@ -65,7 +65,7 @@ class SummaryEntity(id: EntityID<Int>) : IntEntity(id) {
 class SummaryStateEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<SummaryStateEntity>(SummaryStateTable)
 
-    var botMark by SummaryStateTable.botMark
+    var botId by SummaryStateTable.botId
     var groupId by SummaryStateTable.groupId
     var lastProcessedHistoryId by SummaryStateTable.lastProcessedHistoryId
     var lastProcessedAt by SummaryStateTable.lastProcessedAt
@@ -77,7 +77,7 @@ class SummaryStateEntity(id: EntityID<Int>) : IntEntity(id) {
 @Serializable
 data class SummaryRecord(
     val id: Int,
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val timeRange: String,
     val content: String,
@@ -91,7 +91,7 @@ data class SummaryRecord(
 @Serializable
 data class SummaryStateRecord(
     val id: Int,
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val lastProcessedHistoryId: Int,
     val lastProcessedAt: LocalDateTime
@@ -102,7 +102,7 @@ data class SummaryStateRecord(
  */
 fun SummaryEntity.toRecord(): SummaryRecord = SummaryRecord(
     id = id.value,
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     timeRange = timeRange,
     content = content,
@@ -115,7 +115,7 @@ fun SummaryEntity.toRecord(): SummaryRecord = SummaryRecord(
 
 fun SummaryStateEntity.toRecord(): SummaryStateRecord = SummaryStateRecord(
     id = id.value,
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     lastProcessedHistoryId = lastProcessedHistoryId,
     lastProcessedAt = lastProcessedAt

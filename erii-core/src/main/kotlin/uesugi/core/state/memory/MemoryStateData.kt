@@ -21,7 +21,7 @@ import uesugi.common.toolkit.LocalDateTimeAsDateSerializer
  * - lastProcessedAt: 上次处理的时间
  */
 object MemoryStateTable : IntIdTable("memory_state") {
-    val botMark = varchar("bot_mark", length = 64)
+    val botId = varchar("bot_id", length = 64)
     val groupId = varchar("group_id", length = 64)
     val lastProcessedHistoryId = integer("last_processed_history_id").default(0)
     val lastProcessedAt = datetime("last_processed_at")
@@ -34,7 +34,7 @@ object MemoryStateTable : IntIdTable("memory_state") {
 class MemoryStateEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<MemoryStateEntity>(MemoryStateTable)
 
-    var botMark by MemoryStateTable.botMark
+    var botId by MemoryStateTable.botId
     var groupId by MemoryStateTable.groupId
     var lastProcessedHistoryId by MemoryStateTable.lastProcessedHistoryId
     var lastProcessedAt by MemoryStateTable.lastProcessedAt
@@ -46,7 +46,7 @@ class MemoryStateEntity(id: EntityID<Int>) : IntEntity(id) {
 @Serializable
 data class MemoryStateRecord(
     val id: Int,
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val lastProcessedHistoryId: Int,
     val lastProcessedAt: LocalDateTime
@@ -57,7 +57,7 @@ data class MemoryStateRecord(
  */
 fun MemoryStateEntity.toRecord(): MemoryStateRecord = MemoryStateRecord(
     id = id.value,
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     lastProcessedHistoryId = lastProcessedHistoryId,
     lastProcessedAt = lastProcessedAt

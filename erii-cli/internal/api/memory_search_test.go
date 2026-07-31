@@ -9,10 +9,10 @@ func TestMemoryGraphSearchResponseJSON(t *testing.T) {
 	raw := []byte(`{
 		"query": "杭州",
 		"seedResults": [
-			{"fact": {"id": 1, "botMark": "bot-a", "groupId": "group-a", "keyword": "seed", "description": "seed fact", "entities": ["杭州"], "subjects": "user-a", "scopeType": "USER", "createdAt": "2026-07-03T00:00:00", "validFrom": "2026-07-03T00:00:00", "validTo": null, "vectorId": "v1"}, "score": 0.91, "vectorId": "v1", "source": "seed"}
+			{"fact": {"id": 1, "botId": "bot-a", "groupId": "group-a", "keyword": "seed", "description": "seed fact", "entities": ["杭州"], "subjects": "user-a", "scopeType": "USER", "createdAt": "2026-07-03T00:00:00", "validFrom": "2026-07-03T00:00:00", "validTo": null, "vectorId": "v1"}, "score": 0.91, "vectorId": "v1", "source": "seed"}
 		],
 		"expandedResults": [
-			{"fact": {"id": 2, "botMark": "bot-a", "groupId": "group-a", "keyword": "expanded", "description": "expanded fact", "entities": ["杭州", "西湖"], "subjects": "user-a", "scopeType": "USER", "createdAt": "2026-07-03T00:00:00", "validFrom": "2026-07-03T00:00:00", "validTo": null, "vectorId": null}, "score": null, "vectorId": null, "source": "expanded"}
+			{"fact": {"id": 2, "botId": "bot-a", "groupId": "group-a", "keyword": "expanded", "description": "expanded fact", "entities": ["杭州", "西湖"], "subjects": "user-a", "scopeType": "USER", "createdAt": "2026-07-03T00:00:00", "validFrom": "2026-07-03T00:00:00", "validTo": null, "vectorId": null}, "score": null, "vectorId": null, "source": "expanded"}
 		],
 		"nodes": [
 			{"id": "fact:1", "type": "fact", "label": "#1 seed", "source": "seed"},

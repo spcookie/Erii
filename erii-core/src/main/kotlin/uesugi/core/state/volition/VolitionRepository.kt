@@ -25,24 +25,24 @@ class VolitionRepository {
     /**
      * 查找需要处理的群组
      */
-    fun findGroupsNeedProcessing(botMark: String): List<String> {
+    fun findGroupsNeedProcessing(botId: String): List<String> {
         return transaction {
             val allGroupIds = HistoryTable
                 .select(HistoryTable.groupId)
-                .where { HistoryTable.botMark eq botMark }
+                .where { HistoryTable.botId eq botId }
                 .groupBy(HistoryTable.groupId)
                 .map { it[HistoryTable.groupId] }
                 .distinct()
 
             allGroupIds.filter { groupId ->
                 val volitionState = VolitionStateEntity.find(
-                    (VolitionStateTable.botMark eq botMark) and (VolitionStateTable.groupId eq groupId)
+                    (VolitionStateTable.botId eq botId) and (VolitionStateTable.groupId eq groupId)
                 ).firstOrNull()
 
                 val lastProcessedId = volitionState?.lastProcessedHistoryId ?: 0
 
                 val newMessageCount = HistoryEntity.count(
-                    (HistoryTable.botMark eq botMark) and
+                    (HistoryTable.botId eq botId) and
                             (HistoryTable.groupId eq groupId) and
                             (HistoryTable.id greater lastProcessedId)
                 )
@@ -53,13 +53,13 @@ class VolitionRepository {
     }
 
     fun getLatestHistoriesToProcess(
-        botMark: String,
+        botId: String,
         groupId: String,
         lastHistoryId: Int,
         limit: Int
     ): List<HistoryEntity> = transaction {
         HistoryEntity.find(
-            (HistoryTable.botMark eq botMark) and
+            (HistoryTable.botId eq botId) and
                     (HistoryTable.groupId eq groupId) and
                     (HistoryTable.id greater lastHistoryId)
         )
@@ -72,10 +72,10 @@ class VolitionRepository {
     /**
      * 获取意愿状态
      */
-    fun getVolitionState(botMark: String, groupId: String): VolitionStateEntity? {
+    fun getVolitionState(botId: String, groupId: String): VolitionStateEntity? {
         return transaction {
             VolitionStateEntity.find(
-                (VolitionStateTable.botMark eq botMark) and (VolitionStateTable.groupId eq groupId)
+                (VolitionStateTable.botId eq botId) and (VolitionStateTable.groupId eq groupId)
             ).firstOrNull()
         }
     }
@@ -84,14 +84,14 @@ class VolitionRepository {
      * 更新意愿状态
      */
     @OptIn(ExperimentalTime::class)
-    fun updateVolitionState(botMark: String, groupId: String, lastHistoryId: Int) {
+    fun updateVolitionState(botId: String, groupId: String, lastHistoryId: Int) {
         transaction {
             val now = kotlin.time.Clock.System.now()
             val tz = TimeZone.currentSystemDefault()
             val instant = now.toLocalDateTime(tz)
 
             val existing = VolitionStateEntity.find(
-                (VolitionStateTable.botMark eq botMark) and (VolitionStateTable.groupId eq groupId)
+                (VolitionStateTable.botId eq botId) and (VolitionStateTable.groupId eq groupId)
             ).firstOrNull()
 
             if (existing != null) {
@@ -99,7 +99,7 @@ class VolitionRepository {
                 existing.lastProcessedAt = instant
             } else {
                 VolitionStateEntity.new {
-                    this.botMark = botMark
+                    this.botId = botId
                     this.groupId = groupId
                     this.lastProcessedHistoryId = lastHistoryId
                     this.lastProcessedAt = instant
@@ -112,10 +112,10 @@ class VolitionRepository {
     /**
      * 直接更新意愿状态（用于外部 API 修改）
      */
-    fun updateVolitionStateDirect(botMark: String, groupId: String, fatigue: Double, stimulus: Double) {
+    fun updateVolitionStateDirect(botId: String, groupId: String, fatigue: Double, stimulus: Double) {
         transaction {
             val existing = VolitionStateEntity.find(
-                (VolitionStateTable.botMark eq botMark) and (VolitionStateTable.groupId eq groupId)
+                (VolitionStateTable.botId eq botId) and (VolitionStateTable.groupId eq groupId)
             ).firstOrNull()
 
             if (existing != null) {
@@ -123,7 +123,7 @@ class VolitionRepository {
                 existing.stimulus = stimulus
             } else {
                 VolitionStateEntity.new {
-                    this.botMark = botMark
+                    this.botId = botId
                     this.groupId = groupId
                     this.fatigue = fatigue
                     this.stimulus = stimulus

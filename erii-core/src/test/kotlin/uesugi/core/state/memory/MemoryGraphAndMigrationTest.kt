@@ -546,7 +546,7 @@ class MemoryGraphAndMigrationTest {
         )
         assertEquals(
             listOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"),
-            vectorStore.activeGroups.map { (botMark, groupId) -> "$botMark:$groupId" }
+            vectorStore.activeGroups.map { (botId, groupId) -> "$botId:$groupId" }
         )
         assertEquals("fact_bot-a_group-b_$second", repository.getFactById(second)!!.vectorId)
     }
@@ -590,7 +590,7 @@ class MemoryGraphAndMigrationTest {
         assertEquals(listOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"), graphStore.rebuilt)
         assertEquals(
             listOf("bot-a:group-a", "bot-a:group-b", "bot-b:group-a"),
-            graphStore.activeGroups.map { (botMark, groupId) -> "$botMark:$groupId" }
+            graphStore.activeGroups.map { (botId, groupId) -> "$botId:$groupId" }
         )
     }
 
@@ -839,7 +839,7 @@ class MemoryGraphAndMigrationTest {
         override suspend fun search(
             query: String,
             groupId: String,
-            botMark: String,
+            botId: String,
             topK: Int
         ): List<FactSearchResult> {
             searchTopKs.add(topK)
@@ -852,20 +852,20 @@ class MemoryGraphAndMigrationTest {
         override fun searchByKeyword(
             query: String,
             groupId: String,
-            botMark: String,
+            botId: String,
             topK: Int
         ): List<FactSearchResult> {
             keywordTopKs.add(topK)
             return keywordResults.take(topK)
         }
 
-        override fun clearStore(botMark: String, groupId: String) {
-            cleared.add("$botMark:$groupId")
+        override fun clearStore(botId: String, groupId: String) {
+            cleared.add("$botId:$groupId")
         }
 
-        override suspend fun rebuildStore(botMark: String, groupId: String, facts: List<FactsRecord>): List<Pair<Int, String>> {
-            rebuilt["$botMark:$groupId"] = facts.map { it.id }
-            return facts.map { it.id to generateVectorId(it.botMark, it.groupId, it.id) }
+        override suspend fun rebuildStore(botId: String, groupId: String, facts: List<FactsRecord>): List<Pair<Int, String>> {
+            rebuilt["$botId:$groupId"] = facts.map { it.id }
+            return facts.map { it.id to generateVectorId(it.botId, it.groupId, it.id) }
         }
 
         override fun removeOrphanStores(activeGroups: List<Pair<String, String>>): List<String> {
@@ -878,10 +878,10 @@ class MemoryGraphAndMigrationTest {
                 error("expected vector indexing failure")
             }
             indexed.add(fact.id)
-            return generateVectorId(fact.botMark, fact.groupId, fact.id)
+            return generateVectorId(fact.botId, fact.groupId, fact.id)
         }
 
-        override fun deleteVector(vectorId: String, botMark: String, groupId: String) {
+        override fun deleteVector(vectorId: String, botId: String, groupId: String) {
             deleted.add(vectorId)
         }
     }
@@ -895,8 +895,8 @@ class MemoryGraphAndMigrationTest {
         val rebuilt = mutableListOf<String>()
         var activeGroups: List<Pair<String, String>> = emptyList()
 
-        override fun rebuildStore(botMark: String, groupId: String) {
-            rebuilt.add("$botMark:$groupId")
+        override fun rebuildStore(botId: String, groupId: String) {
+            rebuilt.add("$botId:$groupId")
         }
 
         override fun removeOrphanStores(activeGroups: List<Pair<String, String>>): List<String> {
@@ -908,14 +908,14 @@ class MemoryGraphAndMigrationTest {
             added.add(fact.id)
         }
 
-        override fun removeFactEntities(factId: Int, botMark: String, groupId: String) {
+        override fun removeFactEntities(factId: Int, botId: String, groupId: String) {
             removed.add(factId)
         }
 
-        override fun expandByEntities(entityIds: List<String>, botMark: String, groupId: String): List<Int> =
+        override fun expandByEntities(entityIds: List<String>, botId: String, groupId: String): List<Int> =
             entityIds.flatMap { entitiesToFacts[it].orEmpty() }
 
-        override fun expandByFacts(factIds: List<Int>, botMark: String, groupId: String): List<String> =
+        override fun expandByFacts(factIds: List<Int>, botId: String, groupId: String): List<String> =
             factIds.flatMap { factsToEntities[it].orEmpty() }
     }
 

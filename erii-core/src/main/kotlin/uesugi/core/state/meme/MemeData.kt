@@ -39,7 +39,7 @@ object MemeData {
     object MemeTable : IntIdTable("meme") {
         const val DEFAULT_LENGTH = 255
 
-        val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+        val botId = varchar("bot_id", length = DEFAULT_LENGTH)
         val groupId = varchar("group_id", length = DEFAULT_LENGTH)
 
         val resourceId = integer("resource_id")
@@ -76,7 +76,7 @@ object MemeData {
     object MemeScanStateTable : IntIdTable("meme_scan_state") {
         const val DEFAULT_LENGTH = 255
 
-        val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+        val botId = varchar("bot_id", length = DEFAULT_LENGTH)
         val groupId = varchar("group_id", length = DEFAULT_LENGTH)
 
         // 最后扫描的 history id
@@ -92,7 +92,7 @@ object MemeData {
     class MemeEntity(id: EntityID<Int>) : IntEntity(id) {
         companion object : IntEntityClass<MemeEntity>(MemeTable)
 
-        var botMark by MemeTable.botMark
+        var botId by MemeTable.botId
         var groupId by MemeTable.groupId
         var resourceId by MemeTable.resourceId
         var md5 by MemeTable.md5
@@ -119,7 +119,7 @@ object MemeData {
     class MemeScanStateEntity(id: EntityID<Int>) : IntEntity(id) {
         companion object : IntEntityClass<MemeScanStateEntity>(MemeScanStateTable)
 
-        var botMark by MemeScanStateTable.botMark
+        var botId by MemeScanStateTable.botId
         var groupId by MemeScanStateTable.groupId
         var lastHistoryId by MemeScanStateTable.lastHistoryId
         var lastScanAt by MemeScanStateTable.lastScanAt
@@ -155,7 +155,7 @@ object MemeData {
     fun MemeEntity.toRecord(): MemeRecord {
         return MemeRecord(
             id = id.value,
-            botId = botMark,
+            botId = botId,
             groupId = groupId,
             resourceId = resourceId,
             md5 = md5,
@@ -183,7 +183,7 @@ object MemeData {
     @Serializable
     data class MemeScanStateRecord(
         val id: Int? = null,
-        val botMark: String,
+        val botId: String,
         val groupId: String,
         val lastHistoryId: Int = 0,
         val lastScanAt: LocalDateTime
@@ -195,7 +195,7 @@ object MemeData {
     fun MemeScanStateEntity.toRecord(): MemeScanStateRecord {
         return MemeScanStateRecord(
             id = id.value,
-            botMark = botMark,
+            botId = botId,
             groupId = groupId,
             lastHistoryId = lastHistoryId,
             lastScanAt = lastScanAt

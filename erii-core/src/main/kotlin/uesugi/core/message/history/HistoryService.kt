@@ -21,13 +21,13 @@ data class HourlyMessageCount(
 )
 
 class HistoryService {
-    fun getLatestHistory(botMark: String, groupId: String, limit: Int, range: Duration): List<HistoryRecord> {
+    fun getLatestHistory(botId: String, groupId: String, limit: Int, range: Duration): List<HistoryRecord> {
         val now = Clock.System.now()
         val oneDayAgo = now - range
         val timeZone = TimeZone.currentSystemDefault()
         return transaction {
             HistoryEntity.find {
-                (HistoryTable.botMark eq botMark) and
+                (HistoryTable.botId eq botId) and
                         (HistoryTable.groupId eq groupId) and
                         (HistoryTable.createdAt greaterEq oneDayAgo.toLocalDateTime(timeZone)) and
                         (HistoryTable.createdAt lessEq now.toLocalDateTime(timeZone))
@@ -44,7 +44,7 @@ class HistoryService {
     fun saveHistory(history: HistoryRecord): HistoryRecord {
         return transaction {
             HistoryEntity.new {
-                this.botMark = history.botMark
+                this.botId = history.botId
                 this.groupId = history.groupId
                 this.userId = history.userId
                 this.nick = history.nick
@@ -52,7 +52,7 @@ class HistoryService {
                 this.resource = history.resource?.let { resource ->
                     resource.id?.let(ResourceEntity::findById)
                         ?: ResourceEntity.new {
-                            this.botMark = history.botMark
+                            this.botId = history.botId
                             this.groupId = history.groupId
                             this.url = resource.url
                             this.fileName = resource.fileName
@@ -67,24 +67,24 @@ class HistoryService {
     }
 
     fun getAllHistoryByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         offset: Int = 0,
         limit: Int = 500
     ): Pair<List<HistoryRecord>, Int> = getAllHistoryByGroup(
-        botMark,
+        botId,
         groupId,
         ManageListQuery(offset = offset, limit = limit)
     )
 
     fun getAllHistoryByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         listQuery: ManageListQuery
     ): Pair<List<HistoryRecord>, Int> {
         return transaction {
             var condition: Op<Boolean> =
-                (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId)
+                (HistoryTable.botId eq botId) and (HistoryTable.groupId eq groupId)
             if (listQuery.search.isNotBlank()) {
                 val matchingTypes = MessageType.entries.filter {
                     it.name.lowercase().contains(listQuery.search.lowercase())
@@ -144,7 +144,7 @@ class HistoryService {
     }
 
     fun getHistoryByGroupCursor(
-        botMark: String,
+        botId: String,
         groupId: String,
         beforeId: Int?,
         limit: Int
@@ -152,13 +152,13 @@ class HistoryService {
         return transaction {
             val baseQuery = if (beforeId != null) {
                 HistoryEntity.find {
-                    (HistoryTable.botMark eq botMark) and
+                    (HistoryTable.botId eq botId) and
                             (HistoryTable.groupId eq groupId) and
                             (HistoryTable.id less beforeId)
                 }
             } else {
                 HistoryEntity.find {
-                    (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId)
+                    (HistoryTable.botId eq botId) and (HistoryTable.groupId eq groupId)
                 }
             }
             val items = baseQuery
@@ -172,14 +172,14 @@ class HistoryService {
         }
     }
 
-    fun getHourlyMessageCounts(botMark: String, groupId: String, hours: Int = 12): List<HourlyMessageCount> {
+    fun getHourlyMessageCounts(botId: String, groupId: String, hours: Int = 12): List<HourlyMessageCount> {
         val now = Clock.System.now()
         val startTime = now - hours.toDuration(DurationUnit.HOURS)
         val timeZone = TimeZone.currentSystemDefault()
 
         return transaction {
             HistoryEntity.find {
-                (HistoryTable.botMark eq botMark) and
+                (HistoryTable.botId eq botId) and
                         (HistoryTable.groupId eq groupId) and
                         (HistoryTable.createdAt greaterEq startTime.toLocalDateTime(timeZone))
             }.toList()
@@ -192,8 +192,8 @@ class HistoryService {
             (0 until hours).map { offset ->
                 val hour = (currentHour - (hours - 1 - offset) + 24) % 24
                 val records = grouped[hour] ?: emptyList()
-                val botCount = records.count { it.userId == botMark }
-                val groupCount = records.count { it.userId != botMark }
+                val botCount = records.count { it.userId == botId }
+                val groupCount = records.count { it.userId != botId }
                 HourlyMessageCount(
                     hourLabel = "${hour.toString().padStart(2, '0')}:00",
                     botCount = botCount,

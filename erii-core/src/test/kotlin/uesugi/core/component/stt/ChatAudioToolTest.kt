@@ -88,7 +88,7 @@ class ChatAudioToolTest {
 
     private fun createHistory(path: String, messageType: MessageType): Int = transaction {
         val resource = ResourceEntity.new {
-            botMark = "bot-a"
+            botId = "bot-a"
             groupId = "group-a"
             url = path
             fileName = path.substringAfterLast("/")
@@ -96,7 +96,7 @@ class ChatAudioToolTest {
             md5 = UUID.randomUUID().toString()
         }
         HistoryEntity.new {
-            botMark = "bot-a"
+            botId = "bot-a"
             groupId = "group-a"
             userId = "user-a"
             nick = "Alice"

@@ -39,7 +39,7 @@ class EvolutionJob(
     }
 
     override fun accepts(record: HistoryRecord): Boolean =
-        record.messageType == MessageType.TEXT && record.userId != record.botMark
+        record.messageType == MessageType.TEXT && record.userId != record.botId
 
     override fun pendingKeys(): Set<StateWorkKey> = buildSet {
         for (botId in BotManage.getAllBotIds()) {
@@ -126,7 +126,7 @@ class EvolutionJob(
     }
 
     private suspend fun processMessages(
-        botMark: String,
+        botId: String,
         groupId: String,
         analysisMessages: List<String>,
         recentMessages: List<String>
@@ -144,9 +144,9 @@ class EvolutionJob(
 
         withContext(Dispatchers.IO) {
             for (slangWord in slangWords) {
-                evolutionService.addOrUpdateWord(botMark, groupId, slangWord)
+                evolutionService.addOrUpdateWord(botId, groupId, slangWord)
             }
-            evolutionService.decayOldWords(botMark, groupId, recentMessages)
+            evolutionService.decayOldWords(botId, groupId, recentMessages)
         }
     }
 }

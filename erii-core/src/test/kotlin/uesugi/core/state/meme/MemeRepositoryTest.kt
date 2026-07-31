@@ -65,7 +65,7 @@ class MemeRepositoryTest {
         val database = createDatabase()
         transaction(database) {
             HistoryEntity.new {
-                botMark = "bot-a"
+                botId = "bot-a"
                 groupId = "group-a"
                 userId = "user-a"
                 nick = "user"
@@ -73,7 +73,7 @@ class MemeRepositoryTest {
                 content = "image without stored resource"
             }
             val resource = ResourceEntity.new {
-                botMark = "bot-a"
+                botId = "bot-a"
                 groupId = "group-a"
                 url = "images/ok.png"
                 fileName = "ok.png"
@@ -81,7 +81,7 @@ class MemeRepositoryTest {
                 md5 = "md5-ok"
             }
             HistoryEntity.new {
-                botMark = "bot-a"
+                botId = "bot-a"
                 groupId = "group-a"
                 userId = "user-a"
                 nick = "user"
@@ -114,11 +114,11 @@ class MemeRepositoryTest {
         val rebuilt = linkedMapOf<String, List<Int?>>()
 
         override suspend fun rebuildStore(
-            botMark: String,
+            botId: String,
             groupId: String,
             memos: List<MemeRecord>
         ): List<Pair<Int, String>> {
-            rebuilt["$botMark:$groupId"] = memos.map { it.id }
+            rebuilt["$botId:$groupId"] = memos.map { it.id }
             return memos.map { meme -> meme.id!! to "rebuilt-${meme.id}" }
         }
     }

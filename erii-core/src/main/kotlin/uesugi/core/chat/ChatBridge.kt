@@ -81,10 +81,10 @@ class ChatBridge(
     )
 
     fun getHistory(beforeId: Long?, limit: Int = HISTORY_LIMIT): HistoryResult {
-        val botMark = MOCK_BOT_ID.toString()
+        val botId = MOCK_BOT_ID.toString()
         val groupId = MOCK_GROUP_ID.toString()
         val (records, hasMore) = historyService.getHistoryByGroupCursor(
-            botMark = botMark,
+            botId = botId,
             groupId = groupId,
             beforeId = beforeId?.toInt(),
             limit = limit
@@ -229,10 +229,10 @@ internal fun HistoryRecord.toChatHistoryEntry(): ChatHistoryEntry {
 
 internal fun HistoryRecord.chatImageResourceOrNull(): ResourceRecord? =
     takeIf {
-        botMark == MOCK_BOT_ID.toString() &&
+        botId == MOCK_BOT_ID.toString() &&
                 groupId == MOCK_GROUP_ID.toString()
     }?.resource?.takeIf {
-        it.botMark == MOCK_BOT_ID.toString() && it.groupId == MOCK_GROUP_ID.toString()
+        it.botId == MOCK_BOT_ID.toString() && it.groupId == MOCK_GROUP_ID.toString()
     }
 
 internal fun String.removeMockBotMention(): String {

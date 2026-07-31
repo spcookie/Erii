@@ -20,7 +20,7 @@ import uesugi.common.toolkit.JSON
 object EmotionTable : IntIdTable("chat_emotion") {
     const val DEFAULT_LENGTH = 64
 
-    val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+    val botId = varchar("bot_id", length = DEFAULT_LENGTH)
     val groupId = varchar("group_id", length = DEFAULT_LENGTH)
     val emotionalTendency =
         enumerationByName<EmotionalTendencies>("emotional_tendency", length = 32)
@@ -37,7 +37,7 @@ object EmotionTable : IntIdTable("chat_emotion") {
 class EmotionEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<EmotionEntity>(EmotionTable)
 
-    var botMark by EmotionTable.botMark
+    var botId by EmotionTable.botId
     var groupId by EmotionTable.groupId
     var emotionalTendency by EmotionTable.emotionalTendency
     var stimulus: PAD by EmotionTable.stimulus.transform(PADColumnTransformer())
@@ -106,12 +106,12 @@ enum class EmojiLevel {
     HIGH
 }
 
-fun EmotionEntity.Companion.findRequiredAnalysisHistoryGroupIds(botMark: String): List<String> {
+fun EmotionEntity.Companion.findRequiredAnalysisHistoryGroupIds(botId: String): List<String> {
     return transaction {
         // 获取每个群组的最新 historyMessageProcessed
         val lastProcessedByGroup = EmotionTable
             .select(EmotionTable.groupId, EmotionTable.historyMessageProcessed)
-            .where { EmotionTable.botMark eq botMark }
+            .where { EmotionTable.botId eq botId }
             .map { it[EmotionTable.groupId] to it[EmotionTable.historyMessageProcessed] }
             .groupBy { it.first }
             .mapValues { it.value.maxOfOrNull { p -> p.second } ?: 0 }
@@ -119,7 +119,7 @@ fun EmotionEntity.Companion.findRequiredAnalysisHistoryGroupIds(botMark: String)
         // 获取所有有历史消息的 groupId
         val allGroupIds = HistoryTable
             .select(HistoryTable.groupId)
-            .where { HistoryTable.botMark eq botMark }
+            .where { HistoryTable.botId eq botId }
             .withDistinct(true)
             .map { it[HistoryTable.groupId] }
 
@@ -127,7 +127,7 @@ fun EmotionEntity.Companion.findRequiredAnalysisHistoryGroupIds(botMark: String)
         allGroupIds.filter { groupId ->
             val lastProcessed = lastProcessedByGroup[groupId] ?: 0
             val newCount = HistoryEntity.count(
-                (HistoryTable.botMark eq botMark) and
+                (HistoryTable.botId eq botId) and
                         (HistoryTable.groupId eq groupId) and
                         (HistoryTable.id greater lastProcessed)
             )
@@ -137,13 +137,13 @@ fun EmotionEntity.Companion.findRequiredAnalysisHistoryGroupIds(botMark: String)
 }
 
 fun EmotionEntity.Companion.findNotAnalysisHistoryGroupIds(
-    botMark: String,
+    botId: String,
     groupIds: List<String>
 ): List<String> {
     return transaction {
         EmotionTable.select(EmotionTable.groupId)
             .where {
-                (EmotionTable.botMark eq botMark).apply {
+                (EmotionTable.botId eq botId).apply {
                     if (groupIds.isNotEmpty()) {
                         this and (EmotionTable.groupId notInList groupIds)
                     }
@@ -158,7 +158,7 @@ fun EmotionEntity.Companion.findNotAnalysisHistoryGroupIds(
 @Serializable
 data class EmotionRecord(
     val id: Int,
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val emotionalTendency: String,
     val stimulus: PAD,
@@ -170,7 +170,7 @@ data class EmotionRecord(
 
 fun EmotionEntity.toRecord(): EmotionRecord = EmotionRecord(
     id = id.value,
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     emotionalTendency = emotionalTendency.name,
     stimulus = stimulus,

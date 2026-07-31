@@ -29,28 +29,28 @@ class EmotionRepository {
     /**
      * 查找需要分析的群组（新消息的群组）
      */
-    fun findGroupsNeedAnalysis(botMark: String): List<String> {
+    fun findGroupsNeedAnalysis(botId: String): List<String> {
         return transaction {
-            EmotionEntity.findRequiredAnalysisHistoryGroupIds(botMark)
+            EmotionEntity.findRequiredAnalysisHistoryGroupIds(botId)
         }
     }
 
     /**
      * 查找不需要分析的群组（无新消息的群组）
      */
-    fun findGroupsNotNeedAnalysis(botMark: String, excludeGroups: List<String>): List<String> {
+    fun findGroupsNotNeedAnalysis(botId: String, excludeGroups: List<String>): List<String> {
         return transaction {
-            EmotionEntity.findNotAnalysisHistoryGroupIds(botMark, excludeGroups)
+            EmotionEntity.findNotAnalysisHistoryGroupIds(botId, excludeGroups)
         }
     }
 
     /**
      * 获取群组的最新情绪记录
      */
-    fun getLatestEmotion(botMark: String, groupId: String): EmotionEntity? {
+    fun getLatestEmotion(botId: String, groupId: String): EmotionEntity? {
         return transaction {
             EmotionEntity.find(
-                (EmotionTable.groupId eq groupId) and (EmotionTable.botMark eq botMark)
+                (EmotionTable.groupId eq groupId) and (EmotionTable.botId eq botId)
             )
                 .orderBy(EmotionTable.createdAt to SortOrder.DESC)
                 .limit(1)
@@ -59,13 +59,13 @@ class EmotionRepository {
     }
 
     fun getLatestNewMessages(
-        botMark: String,
+        botId: String,
         groupId: String,
         lastProcessedId: Int,
         limit: Int = 200
     ): List<HistoryEntity> = transaction {
         HistoryEntity.find(
-            (HistoryTable.botMark eq botMark) and
+            (HistoryTable.botId eq botId) and
                     (HistoryTable.groupId eq groupId) and
                     (HistoryTable.id greater lastProcessedId)
         )
@@ -78,10 +78,10 @@ class EmotionRepository {
     /**
      * 获取上下文消息（用于情绪分析）
      */
-    fun getContextMessages(botMark: String, groupId: String, beforeId: Int, limit: Int = 100): List<HistoryEntity> {
+    fun getContextMessages(botId: String, groupId: String, beforeId: Int, limit: Int = 100): List<HistoryEntity> {
         return transaction {
             HistoryEntity.find(
-                (HistoryTable.botMark eq botMark) and
+                (HistoryTable.botId eq botId) and
                         (HistoryTable.groupId eq groupId) and
                         (HistoryTable.id lessEq beforeId)
             )
@@ -96,7 +96,7 @@ class EmotionRepository {
      * 保存情绪记录
      */
     fun saveEmotion(
-        botMark: String,
+        botId: String,
         groupId: String,
         emotionalTendency: EmotionalTendencies,
         stimulus: PAD,
@@ -107,7 +107,7 @@ class EmotionRepository {
     ) {
         transaction {
             EmotionEntity.new {
-                this.botMark = botMark
+                this.botId = botId
                 this.groupId = groupId
                 this.emotionalTendency = emotionalTendency
                 this.stimulus = stimulus
@@ -118,16 +118,16 @@ class EmotionRepository {
             }
             log.debug("群组 $groupId 情绪状态已保存, 处理到 historyId=$historyMessageProcessed")
 
-            // 清理旧记录，每个 (botMark, groupId) 保留最近 N 条
+            // 清理旧记录，每个 (botId, groupId) 保留最近 N 条
             val idsToKeep = EmotionEntity.find {
-                (EmotionTable.botMark eq botMark) and (EmotionTable.groupId eq groupId)
+                (EmotionTable.botId eq botId) and (EmotionTable.groupId eq groupId)
             }
                 .orderBy(EmotionTable.createdAt to SortOrder.DESC)
                 .limit(MAX_EMOTION_HISTORY_PER_GROUP)
                 .map { it.id.value }
 
             EmotionEntity.find {
-                (EmotionTable.botMark eq botMark) and
+                (EmotionTable.botId eq botId) and
                         (EmotionTable.groupId eq groupId) and
                         (EmotionTable.id notInList idsToKeep)
             }.forEach { it.delete() }

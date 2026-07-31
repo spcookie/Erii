@@ -33,7 +33,7 @@ class ResourceCleanupServiceTest {
         val oldTime = Clock.System.now().minus(10.days).toLocalDateTime(TimeZone.currentSystemDefault())
         val (memeResourceId, plainResourceId) = transaction(database) {
             val memeResource = ResourceEntity.new {
-                botMark = "bot-a"
+                botId = "bot-a"
                 groupId = "group-a"
                 url = "images/meme.png"
                 fileName = "meme.png"
@@ -42,7 +42,7 @@ class ResourceCleanupServiceTest {
                 createdAt = oldTime
             }
             val plainResource = ResourceEntity.new {
-                botMark = "bot-a"
+                botId = "bot-a"
                 groupId = "group-a"
                 url = "images/plain.png"
                 fileName = "plain.png"
@@ -51,7 +51,7 @@ class ResourceCleanupServiceTest {
                 createdAt = oldTime
             }
             MemeEntity.new {
-                botMark = "bot-a"
+                botId = "bot-a"
                 groupId = "group-a"
                 resourceId = memeResource.id.value
                 md5 = "meme-md5"

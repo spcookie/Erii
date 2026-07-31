@@ -85,13 +85,13 @@ class ChatBridgeHistoryTest {
         assertSame(resource, history(messageType = MessageType.IMAGE, resource = resource).chatImageResourceOrNull())
         assertSame(resource, history(messageType = MessageType.TEXT, resource = resource).chatImageResourceOrNull())
         assertTrue(history(messageType = MessageType.TEXT, resource = resource).toChatHistoryEntry().hasImage)
-        assertNull(history(botMark = "other", messageType = MessageType.IMAGE, resource = resource).chatImageResourceOrNull())
+        assertNull(history(botId = "other", messageType = MessageType.IMAGE, resource = resource).chatImageResourceOrNull())
         assertNull(history(groupId = "other", messageType = MessageType.IMAGE, resource = resource).chatImageResourceOrNull())
         assertFalse(history(messageType = MessageType.IMAGE).toChatHistoryEntry().hasImage)
     }
 
     private fun history(
-        botMark: String = MOCK_BOT_ID.toString(),
+        botId: String = MOCK_BOT_ID.toString(),
         groupId: String = MOCK_GROUP_ID.toString(),
         userId: String = MOCK_USER_ID.toString(),
         content: String = "[图片]",
@@ -99,7 +99,7 @@ class ChatBridgeHistoryTest {
         resource: ResourceRecord? = null,
     ) = HistoryRecord(
         id = 42,
-        botMark = botMark,
+        botId = botId,
         groupId = groupId,
         userId = userId,
         nick = "You",
@@ -111,7 +111,7 @@ class ChatBridgeHistoryTest {
 
     private fun resource() = ResourceRecord(
         id = 7,
-        botMark = MOCK_BOT_ID.toString(),
+        botId = MOCK_BOT_ID.toString(),
         groupId = MOCK_GROUP_ID.toString(),
         url = "./image/mock/example.png",
         fileName = "example.png",

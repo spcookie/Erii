@@ -59,7 +59,7 @@ internal class PluginDatabaseImpl(private val pluginName: String) : SpiDatabase 
                 query().map {
                     HistoryRecord(
                         id = it[HistoryTable.id].value,
-                        botMark = it[HistoryTable.botMark],
+                        botId = it[HistoryTable.botId],
                         groupId = it[HistoryTable.groupId],
                         userId = it[HistoryTable.userId],
                         nick = it[HistoryTable.nick],
@@ -70,7 +70,7 @@ internal class PluginDatabaseImpl(private val pluginName: String) : SpiDatabase 
                             val bytes = storage.get(url.toPath()).use { source -> source.buffer().readByteArray() }
                             ResourceRecord(
                                 id = it[ResourceTable.id].value,
-                                botMark = it[ResourceTable.botMark],
+                                botId = it[ResourceTable.botId],
                                 groupId = it[ResourceTable.groupId],
                                 url = url,
                                 fileName = it[ResourceTable.fileName],

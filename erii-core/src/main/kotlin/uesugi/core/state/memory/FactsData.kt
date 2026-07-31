@@ -59,7 +59,7 @@ object EntityListColumnType : ColumnType<List<String>>() {
 }
 
 object FactsTable : IntIdTable("memory_facts") {
-    val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+    val botId = varchar("bot_id", length = DEFAULT_LENGTH)
     val groupId = varchar("group_id", length = DEFAULT_LENGTH)
     val keyword = varchar("keyword", 255)
     val description = text("description")
@@ -72,8 +72,8 @@ object FactsTable : IntIdTable("memory_facts") {
     val lastRecalledAt = datetime("last_recalled_at").nullable()
     val vectorId = varchar("vector_id", length = 64).nullable()
 
-    fun validCondition(botMark: String, groupId: String) =
-        (this.botMark eq botMark) and
+    fun validCondition(botId: String, groupId: String) =
+        (this.botId eq botId) and
                 (this.groupId eq groupId) and
                 (this.validFrom lessEq CurrentDateTime) and
                 (this.validTo.isNull() or (this.validTo greater CurrentDateTime))
@@ -113,7 +113,7 @@ object ScopesSerializer : KSerializer<Scopes> {
 class FactsEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<FactsEntity>(FactsTable)
 
-    var botMark by FactsTable.botMark
+    var botId by FactsTable.botId
     var groupId by FactsTable.groupId
     var keyword by FactsTable.keyword
     var description by FactsTable.description
@@ -137,7 +137,7 @@ fun FactsEntity.isVisibleTo(subjects: List<String>): Boolean =
 @Serializable
 data class FactsRecord(
     val id: Int,
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val keyword: String,
     val description: String,
@@ -283,7 +283,7 @@ data class ConflictResolutionResult(
  */
 fun FactsEntity.toRecord(): FactsRecord = FactsRecord(
     id = id.value,
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     keyword = keyword,
     description = description,

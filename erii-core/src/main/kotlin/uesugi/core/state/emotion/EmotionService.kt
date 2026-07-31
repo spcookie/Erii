@@ -228,7 +228,7 @@ class EmotionService(
         val maxHistoryId = historyEntities.maxOf { it.id.value }
         withContext(Dispatchers.IO) {
             emotionRepository.saveEmotion(
-                botMark = currentBotId,
+                botId = currentBotId,
                 groupId = groupId,
                 emotionalTendency = behaviorProfile.emotion,
                 stimulus = stimulus,
@@ -295,11 +295,11 @@ class EmotionService(
 
     // ====== 原有查询方法 ======
 
-    fun getCurrentBehaviorProfile(botMark: String, groupId: String): BehaviorProfile? {
-        return emotionRepository.getLatestEmotion(botMark, groupId)?.behavior
+    fun getCurrentBehaviorProfile(botId: String, groupId: String): BehaviorProfile? {
+        return emotionRepository.getLatestEmotion(botId, groupId)?.behavior
     }
 
-    fun getCurrentEmotion(botMark: String, groupId: String): PAD? {
-        return emotionRepository.getLatestEmotion(botMark, groupId)?.emotion
+    fun getCurrentEmotion(botId: String, groupId: String): PAD? {
+        return emotionRepository.getLatestEmotion(botId, groupId)?.emotion
     }
 }

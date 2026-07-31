@@ -484,7 +484,7 @@ internal fun buildContext(event: ProactiveSpeakEvent): Context {
                     } else {
                         contentToSubjects.flatMap { (content, contentSubjects) ->
                             memoryService.recallFactsForAgent(
-                                botMark = currentBotId,
+                                botId = currentBotId,
                                 groupId = groupId,
                                 subjects = contentSubjects,
                                 query = content,

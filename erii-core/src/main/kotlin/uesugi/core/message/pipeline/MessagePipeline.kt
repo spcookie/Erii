@@ -72,7 +72,7 @@ class MessagePipeline(
                     }.map { it.toRecord() }
                 }
                 val groupResource = matchingResources.firstOrNull {
-                    it.botMark == context.botId && it.groupId == context.groupId
+                    it.botId == context.botId && it.groupId == context.groupId
                 }
 
                 val path = if (matchingResources.isNotEmpty()) {
@@ -89,7 +89,7 @@ class MessagePipeline(
                 resource = groupResource
                     ?: resourceService.saveResource(
                         ResourceRecord(
-                            botMark = context.botId,
+                            botId = context.botId,
                             groupId = context.groupId,
                             url = path,
                             fileName = path.substringAfterLast("/"),
@@ -102,7 +102,7 @@ class MessagePipeline(
 
             historyService.saveHistory(
                 HistoryRecord(
-                    botMark = context.botId,
+                    botId = context.botId,
                     groupId = context.groupId,
                     userId = context.senderId,
                     nick = context.senderNick,

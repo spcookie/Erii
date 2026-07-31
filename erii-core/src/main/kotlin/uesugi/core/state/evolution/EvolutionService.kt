@@ -31,28 +31,28 @@ class EvolutionService {
     /**
      * 获取6小时前最活跃的消息
      *
-     * @param botMark 机器人标识
+     * @param botId 机器人标识
      * @param groupId 群组ID
      * @param limit 最大消息数量，默认500条
      * @return 消息内容列表
      */
     @OptIn(ExperimentalTime::class)
     fun getMostActiveMessages(
-        botMark: String,
+        botId: String,
         groupId: String,
         limit: Int = 500,
         range: Duration
     ): List<String> = transaction {
         val yesterday = Clock.System.now().minus(range).toLocalDateTime(TimeZone.currentSystemDefault())
 
-        log.debug("开始获取${range.inWholeHours}小时前活跃消息, botId=$botMark, groupId=$groupId, limit=$limit")
+        log.debug("开始获取${range.inWholeHours}小时前活跃消息, botId=$botId, groupId=$groupId, limit=$limit")
 
         val messages = HistoryEntity.find {
-            (HistoryTable.botMark eq botMark) and
+            (HistoryTable.botId eq botId) and
                     (HistoryTable.groupId eq groupId) and
                     (HistoryTable.createdAt greaterEq yesterday) and
                     (HistoryTable.messageType eq MessageType.TEXT) and
-                    (HistoryTable.userId neq botMark)
+                    (HistoryTable.userId neq botId)
         }
             .orderBy(HistoryTable.id to SortOrder.DESC)
             .limit(limit)
@@ -63,7 +63,7 @@ class EvolutionService {
                 if (shouldFilterMessage(content)) null else content
             }
 
-        log.debug("获取6小时前活跃消息完成, botId=$botMark, groupId=$groupId, 消息数=${messages.size}")
+        log.debug("获取6小时前活跃消息完成, botId=$botId, groupId=$groupId, 消息数=${messages.size}")
         messages
     }
 
@@ -108,13 +108,13 @@ class EvolutionService {
 
     @OptIn(ExperimentalTime::class)
     fun addOrUpdateWord(
-        botMark: String,
+        botId: String,
         groupId: String,
         slangWord: SlangWord,
         weight: Int? = null
     ): LearnedVocabRecord = transaction {
         val existing = LearnedVocabEntity.find {
-            (LearnedVocabTable.botMark eq botMark) and
+            (LearnedVocabTable.botId eq botId) and
                     (LearnedVocabTable.groupId eq groupId) and
                     (LearnedVocabTable.word eq slangWord.word)
         }.firstOrNull()
@@ -132,7 +132,7 @@ class EvolutionService {
             existing
         } else {
             LearnedVocabEntity.new {
-                this.botMark = botMark
+                this.botId = botId
                 this.groupId = groupId
                 word = slangWord.word
                 type = slangWord.type
@@ -154,19 +154,19 @@ class EvolutionService {
      *
      * 用于生成 Prompt 时注入的语言风格指南
      *
-     * @param botMark 机器人标识
+     * @param botId 机器人标识
      * @param groupId 群组ID
      * @return 活跃词汇列表，按热度降序排列
      */
     fun getActiveVocabulary(
-        botMark: String,
+        botId: String,
         groupId: String,
         limit: Int = -1
     ): List<LearnedVocabEntity> = transaction {
         val tuning = ConfigHolder.getStateTuning().evolution
         val effectiveLimit = if (limit > 0) limit else tuning.activeLimit
         val vocabs = LearnedVocabEntity.find {
-            (LearnedVocabTable.botMark eq botMark) and
+            (LearnedVocabTable.botId eq botId) and
                     (LearnedVocabTable.groupId eq groupId) and
                     (LearnedVocabTable.weight greaterEq tuning.activeWeightThreshold)
         }
@@ -181,28 +181,28 @@ class EvolutionService {
     /**
      * 获取所有词汇（包括低热度）
      *
-     * @param botMark 机器人标识
+     * @param botId 机器人标识
      * @param groupId 群组ID
      * @return 所有词汇列表
      */
     fun getAllVocabulary(
-        botMark: String,
+        botId: String,
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
     ): Pair<List<LearnedVocabEntity>, Int> = getAllVocabulary(
-        botMark,
+        botId,
         groupId,
         ManageListQuery(offset = offset, limit = limit)
     )
 
     fun getAllVocabulary(
-        botMark: String,
+        botId: String,
         groupId: String,
         listQuery: ManageListQuery
     ): Pair<List<LearnedVocabEntity>, Int> = transaction {
         var condition: Op<Boolean> =
-            (LearnedVocabTable.botMark eq botMark) and
+            (LearnedVocabTable.botId eq botId) and
                     (LearnedVocabTable.groupId eq groupId)
         if (listQuery.search.isNotBlank()) {
             condition = condition and (
@@ -245,13 +245,13 @@ class EvolutionService {
      * 2. 如果词汇在最近3天没有出现，热度-10
      * 3. 当热度 < 20 时，从词汇库中删除（遗忘机制）
      *
-     * @param botMark 机器人标识
+     * @param botId 机器人标识
      * @param groupId 群组ID
      * @param recentMessages 最近的消息列表，用于检测词汇是否仍在使用
      */
     @OptIn(ExperimentalTime::class)
     fun decayOldWords(
-        botMark: String,
+        botId: String,
         groupId: String,
         recentMessages: List<String>
     ) = transaction {
@@ -266,7 +266,7 @@ class EvolutionService {
         var reinforcedCount = 0
 
         LearnedVocabEntity.find {
-            (LearnedVocabTable.botMark eq botMark) and
+            (LearnedVocabTable.botId eq botId) and
                     (LearnedVocabTable.groupId eq groupId)
         }.forEach { vocab ->
             val wordUsedRecently = recentMessages.any { it.contains(vocab.word, ignoreCase = true) }
@@ -298,18 +298,18 @@ class EvolutionService {
      *
      * 场景：如果机器人用了梗，且用户回复"哈哈哈"或点赞，该梗热度 +10
      *
-     * @param botMark 机器人标识
+     * @param botId 机器人标识
      * @param groupId 群组ID
      * @param word 词汇
      */
     fun increaseWeight(
-        botMark: String,
+        botId: String,
         groupId: String,
         word: String
     ) = transaction {
         val tuning = ConfigHolder.getStateTuning().evolution
         LearnedVocabEntity.find {
-            (LearnedVocabTable.botMark eq botMark) and
+            (LearnedVocabTable.botId eq botId) and
                     (LearnedVocabTable.groupId eq groupId) and
                     (LearnedVocabTable.word eq word)
         }.firstOrNull()?.apply {
@@ -336,8 +336,8 @@ class EvolutionService {
         }?.toRecord()
     }
 
-    fun deleteWordById(id: Int, botMark: String, groupId: String): Boolean = transaction {
-        val vocab = LearnedVocabEntity.findById(id)?.takeIf { it.botMark == botMark && it.groupId == groupId }
+    fun deleteWordById(id: Int, botId: String, groupId: String): Boolean = transaction {
+        val vocab = LearnedVocabEntity.findById(id)?.takeIf { it.botId == botId && it.groupId == groupId }
         vocab?.delete()
         vocab != null
     }
@@ -347,18 +347,18 @@ class EvolutionService {
      *
      * 场景：如果机器人用了梗，用户回复"你有病吧"或"看不懂"，该梗热度 -50（立即止损）
      *
-     * @param botMark 机器人标识
+     * @param botId 机器人标识
      * @param groupId 群组ID
      * @param word 词汇
      */
     fun decreaseWeight(
-        botMark: String,
+        botId: String,
         groupId: String,
         word: String
     ) = transaction {
         val tuning = ConfigHolder.getStateTuning().evolution
         LearnedVocabEntity.find {
-            (LearnedVocabTable.botMark eq botMark) and
+            (LearnedVocabTable.botId eq botId) and
                     (LearnedVocabTable.groupId eq groupId) and
                     (LearnedVocabTable.word eq word)
         }.firstOrNull()?.apply {

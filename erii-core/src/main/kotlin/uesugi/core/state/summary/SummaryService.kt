@@ -25,7 +25,7 @@ class SummaryService(
      * 处理群组对话摘要
      */
     suspend fun processSummaryForGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         batchLimit: Int = ConfigHolder.getStateTuning().summary.batchLimit,
         minimumMessages: Int = ConfigHolder.getStateTuning().summary.minMessages,
@@ -36,16 +36,16 @@ class SummaryService(
 
             // 1. 获取需要处理的历史消息
             val summaryState = withContext(Dispatchers.IO) {
-                summaryRepository.getSummaryState(botMark, groupId)
+                summaryRepository.getSummaryState(botId, groupId)
             }
             val initialBatch = summaryState == null
             val lastId = summaryState?.lastProcessedHistoryId ?: 0
 
             val histories = withContext(Dispatchers.IO) {
                 if (initialBatch) {
-                    summaryRepository.getLatestHistories(botMark, groupId, batchLimit)
+                    summaryRepository.getLatestHistories(botId, groupId, batchLimit)
                 } else {
-                    summaryRepository.getHistoriesToProcess(botMark, groupId, lastId, batchLimit)
+                    summaryRepository.getHistoriesToProcess(botId, groupId, lastId, batchLimit)
                 }
             }
 
@@ -69,7 +69,7 @@ class SummaryService(
                 log.debug("群组 $groupId 过滤后无有效消息,跳过摘要生成")
                 val maxHistoryId = histories.maxOf { it.id!! }
                 withContext(Dispatchers.IO) {
-                    summaryRepository.updateSummaryState(botMark, groupId, maxHistoryId)
+                    summaryRepository.updateSummaryState(botId, groupId, maxHistoryId)
                 }
                 return StateWorkResult(
                     histories.size,
@@ -79,11 +79,11 @@ class SummaryService(
             }
 
             // 3. 生成摘要
-            doGenerateSummary(botMark, groupId, messages)
+            doGenerateSummary(botId, groupId, messages)
 
             val maxHistoryId = histories.maxOf { it.id!! }
             withContext(Dispatchers.IO) {
-                summaryRepository.updateSummaryState(botMark, groupId, maxHistoryId)
+                summaryRepository.updateSummaryState(botId, groupId, maxHistoryId)
             }
 
             log.debug("群组 $groupId 对话摘要生成完成")
@@ -103,21 +103,21 @@ class SummaryService(
      * 生成对话摘要
      */
     private suspend fun doGenerateSummary(
-        botMark: String,
+        botId: String,
         groupId: String,
         messages: List<HistoryRecord>
     ) {
         log.debug("开始生成对话摘要, scopeId=$groupId")
 
         val previousSummaryContext = withContext(Dispatchers.IO) {
-            summaryRepository.getLatestSummary(botMark, groupId)
+            summaryRepository.getLatestSummary(botId, groupId)
         }?.let(::buildPreviousSummaryContext)
 
         val summary = summaryAgent.generateSummary(messages, groupId, previousSummaryContext)
 
         withContext(Dispatchers.IO) {
             summaryRepository.saveSummary(
-                botMark = botMark,
+                botId = botId,
                 groupId = groupId,
                 timeRange = summary.timeRange,
                 content = summary.content,
@@ -127,7 +127,7 @@ class SummaryService(
                 messageCount = summary.messageCount
             )
         }
-        log.info("Conversation summary analysis completed, botId=$botMark, groupId=$groupId")
+        log.info("Conversation summary analysis completed, botId=$botId, groupId=$groupId")
     }
 
     /**
@@ -146,20 +146,20 @@ class SummaryService(
     }.trimEnd()
 
     fun getAllSummariesByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
     ): Pair<List<SummaryRecord>, Int> {
-        return summaryRepository.getSummariesByGroup(botMark, groupId, offset, limit)
+        return summaryRepository.getSummariesByGroup(botId, groupId, offset, limit)
     }
 
     fun getAllSummariesByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         listQuery: ManageListQuery
     ): Pair<List<SummaryRecord>, Int> {
-        return summaryRepository.getSummariesByGroup(botMark, groupId, listQuery)
+        return summaryRepository.getSummariesByGroup(botId, groupId, listQuery)
     }
 
     fun getSummaryById(id: Int): SummaryRecord? {

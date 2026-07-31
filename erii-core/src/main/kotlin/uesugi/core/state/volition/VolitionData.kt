@@ -29,7 +29,7 @@ import uesugi.common.toolkit.LocalDateTimeAsDateSerializer
  * 3. 疲劳度达到上限时抑制主动行为
  */
 object VolitionStateTable : IntIdTable("volition_state") {
-    val botMark = varchar("bot_mark", length = 64)
+    val botId = varchar("bot_id", length = 64)
     val groupId = varchar("group_id", length = 64)
     val fatigue = double("fatigue").default(0.0)
     val stimulus = double("stimulus").default(0.0)
@@ -45,7 +45,7 @@ object VolitionStateTable : IntIdTable("volition_state") {
 class VolitionStateEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<VolitionStateEntity>(VolitionStateTable)
 
-    var botMark by VolitionStateTable.botMark
+    var botId by VolitionStateTable.botId
     var groupId by VolitionStateTable.groupId
     var fatigue by VolitionStateTable.fatigue
     var stimulus by VolitionStateTable.stimulus
@@ -60,7 +60,7 @@ class VolitionStateEntity(id: EntityID<Int>) : IntEntity(id) {
 @Serializable
 data class VolitionStateRecord(
     val id: Int,
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val fatigue: Double,
     val stimulus: Double,
@@ -74,7 +74,7 @@ data class VolitionStateRecord(
  */
 fun VolitionStateEntity.toRecord(): VolitionStateRecord = VolitionStateRecord(
     id = id.value,
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     fatigue = fatigue,
     stimulus = stimulus,

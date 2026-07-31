@@ -186,12 +186,12 @@ class MemeJob(
     /**
      * 获取指定图片消息前后的文本上下文
      *
-     * @param botMark 机器人标识
+     * @param botId 机器人标识
      * @param groupId 群组ID
      * @param historyId 图片消息的 history id
      * @return 上下文消息文本
      */
-    private suspend fun getContextMessage(botMark: String, groupId: String, historyId: Int): String? {
+    private suspend fun getContextMessage(botId: String, groupId: String, historyId: Int): String? {
         return withContext(Dispatchers.IO) {
             transaction {
                 val maxMessageLength = ConfigHolder.getAgentMaxMessageLength()
@@ -199,7 +199,7 @@ class MemeJob(
             val beforeMessages = HistoryTable
                 .select(HistoryTable.content)
                 .where {
-                    (HistoryTable.botMark eq botMark) and
+                    (HistoryTable.botId eq botId) and
                             (HistoryTable.groupId eq groupId) and
                             (HistoryTable.messageType eq MessageType.TEXT) and
                             (HistoryTable.id less historyId)
@@ -213,7 +213,7 @@ class MemeJob(
             val afterMessages = HistoryTable
                 .select(HistoryTable.content)
                 .where {
-                    (HistoryTable.botMark eq botMark) and
+                    (HistoryTable.botId eq botId) and
                             (HistoryTable.groupId eq groupId) and
                             (HistoryTable.messageType eq MessageType.TEXT) and
                             (HistoryTable.id greater historyId)
@@ -270,11 +270,11 @@ class MemeJob(
     /**
      * 处理单个群组的表情包提取
      *
-     * @param botMark 机器人标识
+     * @param botId 机器人标识
      * @param groupId 群组ID
      */
     internal suspend fun processGroupExtraction(
-        botMark: String,
+        botId: String,
         groupId: String,
         batchLimit: Int = 20
     ): StateWorkResult {
@@ -283,7 +283,7 @@ class MemeJob(
         try {
             // 获取待分析的表情包
             val allPendingMemos = withContext(Dispatchers.IO) {
-                memeService.getPendingAnalysisMemes(botMark, groupId)
+                memeService.getPendingAnalysisMemes(botId, groupId)
             }
             val pendingMemos = allPendingMemos.take(batchLimit)
 
@@ -317,7 +317,7 @@ class MemeJob(
 
                     if (analysis != null) {
                         // 生成向量ID
-                        val vectorId = vectorStoreFactory.generateVectorId(botMark, groupId, memo.id!!)
+                        val vectorId = vectorStoreFactory.generateVectorId(botId, groupId, memo.id!!)
 
                         // 更新向量存储
                         val updatedMemo = memo.copy(

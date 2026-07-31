@@ -210,7 +210,7 @@ fun Routing.configureBotStatusManager() {
             val factId = call.intPathParam("fact-id") ?: return@get call.respond(mapOf("error" to "invalid fact-id"))
             call.respondScoped(
                 memoryRepository.getFactById(factId), botId, groupId,
-                { it.botMark }, { it.groupId }, "fact not found"
+                { it.botId }, { it.groupId }, "fact not found"
             )
         }
 
@@ -218,7 +218,7 @@ fun Routing.configureBotStatusManager() {
             val request = call.receiveOrError<MemorySearchRequest>() ?: return@post
             call.respond(
                 memoryService.searchFactsVector(
-                    botMark = call.botId(),
+                    botId = call.botId(),
                     groupId = call.groupId(),
                     query = request.query,
                     limit = request.limit.coerceIn(1, 100)
@@ -230,7 +230,7 @@ fun Routing.configureBotStatusManager() {
             val request = call.receiveOrError<MemorySearchRequest>() ?: return@post
             call.respond(
                 memoryService.searchFactsGraph(
-                    botMark = call.botId(),
+                    botId = call.botId(),
                     groupId = call.groupId(),
                     query = request.query,
                     limit = request.limit.coerceIn(1, 100)
@@ -243,7 +243,7 @@ fun Routing.configureBotStatusManager() {
             val groupId = call.groupId()
             val request = call.receiveOrError<FactRequest>() ?: return@post
             val fact = memoryService.createFact(
-                botMark = botId, groupId = groupId, keyword = request.keyword,
+                botId = botId, groupId = groupId, keyword = request.keyword,
                 description = request.description, entities = request.entities,
                 subjects = request.subjects, scopeType = request.scopeType
             )
@@ -261,13 +261,13 @@ fun Routing.configureBotStatusManager() {
             val request = call.receiveOrError<FactRequest>() ?: return@put
             call.respondScoped(
                 memoryService.updateFact(
-                    botMark = botId,
+                    botId = botId,
                     groupId = groupId,
                     id = factId, keyword = request.keyword,
                     description = request.description, entities = request.entities,
                     subjects = request.subjects, scopeType = request.scopeType
                 ), botId, groupId,
-                { it.botMark }, { it.groupId }, "fact not found"
+                { it.botId }, { it.groupId }, "fact not found"
             )
         }
 
@@ -402,7 +402,7 @@ fun Routing.configureBotStatusManager() {
             val vocabId = call.intPathParam("vocab-id") ?: return@get call.respond(mapOf("error" to "invalid vocab-id"))
             call.respondScoped(
                 evolutionService.getVocabularyById(vocabId), botId, groupId,
-                { it.botMark }, { it.groupId }, "vocabulary not found"
+                { it.botId }, { it.groupId }, "vocabulary not found"
             )
         }
 
@@ -425,7 +425,7 @@ fun Routing.configureBotStatusManager() {
                 evolutionService.updateWordById(
                     vocabId, request.word, request.type, request.meaning, request.example, request.weight
                 ), botId, groupId,
-                { it.botMark }, { it.groupId }, "vocabulary not found"
+                { it.botId }, { it.groupId }, "vocabulary not found"
             )
         }
 
@@ -457,7 +457,7 @@ fun Routing.configureBotStatusManager() {
                 call.intPathParam("summary-id") ?: return@get call.respond(mapOf("error" to "invalid summary-id"))
             call.respondScoped(
                 summaryService.getSummaryById(summaryId), botId, groupId,
-                { it.botMark }, { it.groupId }, "summary not found"
+                { it.botId }, { it.groupId }, "summary not found"
             )
         }
 
@@ -472,7 +472,7 @@ fun Routing.configureBotStatusManager() {
                     summaryId, request.timeRange, request.content, request.keyPoints,
                     request.emotionalTone
                 ), botId, groupId,
-                { it.botMark }, { it.groupId }, "summary not found"
+                { it.botId }, { it.groupId }, "summary not found"
             )
         }
 
@@ -505,7 +505,7 @@ fun Routing.configureBotStatusManager() {
                 call.intPathParam("history-id") ?: return@get call.respond(mapOf("error" to "invalid history-id"))
             call.respondScoped(
                 historyService.getHistoryById(historyId), botId, groupId,
-                { it.botMark }, { it.groupId }, "history not found"
+                { it.botId }, { it.groupId }, "history not found"
             )
         }
 
@@ -518,7 +518,7 @@ fun Routing.configureBotStatusManager() {
             call.respondScoped(
                 historyService.updateHistory(historyId, request.content, request.nick),
                 botId, groupId,
-                { it.botMark }, { it.groupId }, "history not found"
+                { it.botId }, { it.groupId }, "history not found"
             )
         }
 
@@ -529,7 +529,7 @@ fun Routing.configureBotStatusManager() {
                 call.intPathParam("history-id") ?: return@delete call.respond(mapOf("error" to "invalid history-id"))
 
             val history = historyService.getHistoryById(historyId)
-            if (history == null || history.botMark != botId || history.groupId != groupId) {
+            if (history == null || history.botId != botId || history.groupId != groupId) {
                 call.respond(mapOf("error" to "history not found"))
                 return@delete
             }

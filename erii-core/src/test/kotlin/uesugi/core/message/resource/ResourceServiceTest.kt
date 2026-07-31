@@ -20,7 +20,7 @@ class ResourceServiceTest {
         val database = createDatabase()
         val (resourceId, historyId) = transaction(database) {
             val resource = ResourceEntity.new {
-                botMark = "bot-a"
+                botId = "bot-a"
                 groupId = "group-a"
                 url = "images/old.png"
                 fileName = "old.png"
@@ -28,7 +28,7 @@ class ResourceServiceTest {
                 md5 = "md5-old"
             }
             val history = HistoryEntity.new {
-                botMark = "bot-a"
+                botId = "bot-a"
                 groupId = "group-a"
                 userId = "user-a"
                 nick = "user"

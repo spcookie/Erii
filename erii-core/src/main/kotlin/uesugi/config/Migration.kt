@@ -26,6 +26,22 @@ private val log = KotlinLogging.logger {}
 
 fun migration(database: Database) {
     transaction(database) {
+        // 将 bot_mark 列重命名为 bot_id（兼容旧数据库）
+        listOf(
+            "chat_history", "chat_resource", "chat_emotion",
+            "memory_facts", "memory_user_profile", "memory_state",
+            "memory_summary", "summary_state",
+            "learned_vocab", "evolution_state",
+            "flow_state", "volition_state",
+            "meme", "meme_scan_state"
+        ).forEach { table ->
+            try {
+                exec("ALTER TABLE $table ALTER COLUMN bot_mark RENAME TO bot_id")
+            } catch (_: ExposedSQLException) {
+                // ignore
+            }
+        }
+
         val migration = MigrationUtils.statementsRequiredForDatabaseMigration(
             HistoryTable,
             ResourceTable,
@@ -39,6 +55,8 @@ fun migration(database: Database) {
             EvolutionStateTable,
             FlowStateTable,
             VolitionStateTable,
+            MemeTable,
+            MemeScanStateTable,
             TokenUsageTable
         )
         migration.forEach { statement ->
@@ -84,13 +102,6 @@ private fun init(database: Database) {
             TokenUsageTable,
             inBatch = true
         )
-        exec("ALTER TABLE memory_facts ADD COLUMN IF NOT EXISTS entities TEXT DEFAULT '[]' NOT NULL")
-        // 清理从 values 重命名为 entities 后遗留的旧列
-        try {
-            exec("ALTER TABLE memory_facts DROP COLUMN IF EXISTS \"values\"")
-        } catch (_: ExposedSQLException) {
-            // 列不存在（新数据库），忽略
-        }
     }
 }
 

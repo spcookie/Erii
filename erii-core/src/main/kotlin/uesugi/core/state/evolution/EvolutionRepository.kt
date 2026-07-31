@@ -22,30 +22,30 @@ class EvolutionRepository {
     /**
      * 获取活跃群组列表
      */
-    fun getActiveGroups(botMark: String): List<String> {
+    fun getActiveGroups(botId: String): List<String> {
         return transaction {
-            log.debug("开始查询活跃群组, botId=$botMark")
+            log.debug("开始查询活跃群组, botId=$botId")
 
-            val groups = queryActiveGroups(botMark)
+            val groups = queryActiveGroups(botId)
 
             log.debug("查询到活跃群组数量: ${groups.size}")
             groups
         }
     }
 
-    fun getState(botMark: String, groupId: String): EvolutionStateRecord? = transaction {
+    fun getState(botId: String, groupId: String): EvolutionStateRecord? = transaction {
         EvolutionStateEntity.find {
-            (EvolutionStateTable.botMark eq botMark) and (EvolutionStateTable.groupId eq groupId)
+            (EvolutionStateTable.botId eq botId) and (EvolutionStateTable.groupId eq groupId)
         }.firstOrNull()?.toStateRecord()
     }
 
-    fun findGroupsNeedProcessing(botMark: String): List<String> = transaction {
-        queryActiveGroups(botMark).filter { groupId ->
+    fun findGroupsNeedProcessing(botId: String): List<String> = transaction {
+        queryActiveGroups(botId).filter { groupId ->
             val cursor = EvolutionStateEntity.find {
-                (EvolutionStateTable.botMark eq botMark) and (EvolutionStateTable.groupId eq groupId)
+                (EvolutionStateTable.botId eq botId) and (EvolutionStateTable.groupId eq groupId)
             }.firstOrNull()?.lastProcessedHistoryId ?: -1
             HistoryTable.select(HistoryTable.id).where {
-                (HistoryTable.botMark eq botMark) and
+                (HistoryTable.botId eq botId) and
                         (HistoryTable.groupId eq groupId) and
                         (HistoryTable.messageType eq MessageType.TEXT) and
                         (HistoryTable.id greater cursor)
@@ -53,17 +53,17 @@ class EvolutionRepository {
         }
     }
 
-    private fun queryActiveGroups(botMark: String): List<String> = HistoryTable
+    private fun queryActiveGroups(botId: String): List<String> = HistoryTable
         .select(HistoryTable.groupId)
-        .where { HistoryTable.botMark eq botMark }
+        .where { HistoryTable.botId eq botId }
         .groupBy(HistoryTable.groupId)
         .map { it[HistoryTable.groupId] }
         .distinct()
 
-    fun latestHistoryId(botMark: String, groupId: String): Int? = transaction {
+    fun latestHistoryId(botId: String, groupId: String): Int? = transaction {
         HistoryTable
             .select(HistoryTable.id)
-            .where { (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId) }
+            .where { (HistoryTable.botId eq botId) and (HistoryTable.groupId eq groupId) }
             .orderBy(HistoryTable.id, SortOrder.DESC)
             .limit(1)
             .firstOrNull()
@@ -72,7 +72,7 @@ class EvolutionRepository {
     }
 
     fun getMessagesAfter(
-        botMark: String,
+        botId: String,
         groupId: String,
         cursor: Int,
         limit: Int
@@ -80,10 +80,10 @@ class EvolutionRepository {
         HistoryTable
             .select(HistoryTable.id, HistoryTable.content)
             .where {
-                (HistoryTable.botMark eq botMark) and
+                (HistoryTable.botId eq botId) and
                         (HistoryTable.groupId eq groupId) and
                         (HistoryTable.messageType eq MessageType.TEXT) and
-                        (HistoryTable.userId neq botMark) and
+                        (HistoryTable.userId neq botId) and
                         (HistoryTable.id greater cursor)
             }
             .orderBy(HistoryTable.id, SortOrder.ASC)
@@ -93,14 +93,14 @@ class EvolutionRepository {
             }
     }
 
-    fun updateState(botMark: String, groupId: String, cursor: Int) = transaction {
+    fun updateState(botId: String, groupId: String, cursor: Int) = transaction {
         val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
         val state = EvolutionStateEntity.find {
-            (EvolutionStateTable.botMark eq botMark) and (EvolutionStateTable.groupId eq groupId)
+            (EvolutionStateTable.botId eq botId) and (EvolutionStateTable.groupId eq groupId)
         }.firstOrNull()
         if (state == null) {
             EvolutionStateEntity.new {
-                this.botMark = botMark
+                this.botId = botId
                 this.groupId = groupId
                 lastProcessedHistoryId = cursor
                 lastProcessedAt = now

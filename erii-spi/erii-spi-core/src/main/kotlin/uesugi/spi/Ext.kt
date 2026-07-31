@@ -81,7 +81,7 @@ suspend fun Database.getLatestHistory(
     return getHistory {
         HistoryTable.selectAll()
             .where {
-                (HistoryTable.botMark eq botId) and
+                (HistoryTable.botId eq botId) and
                         (HistoryTable.groupId eq groupId) and
                         (HistoryTable.createdAt greaterEq oneDayAgo.toLocalDateTime(timeZone)) and
                         (HistoryTable.createdAt lessEq now.toLocalDateTime(timeZone))

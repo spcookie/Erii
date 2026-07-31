@@ -32,7 +32,7 @@ interface GraphStore {
  */
 class Rdf4jGraphStore(
     path: Path,
-    private val botMark: String,
+    private val botId: String,
     private val groupId: String,
     private val memoryRepository: MemoryRepository
 ) : GraphStore {
@@ -49,9 +49,9 @@ class Rdf4jGraphStore(
     // ── Public API ──
 
     override fun rebuild() {
-        log.info("Rebuilding graph store from database, botMark=$botMark, groupId=$groupId...")
+        log.info("Rebuilding graph store from database, botId=$botId, groupId=$groupId...")
         try {
-            val allFacts = memoryRepository.getValidFacts(botMark, groupId)
+            val allFacts = memoryRepository.getValidFacts(botId, groupId)
             repo.connection.use { conn ->
                 conn.begin()
                 conn.clear()

@@ -209,4 +209,4 @@ class MessageAwaiter(val context: Context) : AutoCloseable, CoroutineScope {
 }
 
 internal fun HistoryRecord.isMessageFor(botId: String, groupId: String): Boolean =
-    botMark == botId && this.groupId == groupId && userId != botId
+    this.botId == botId && this.groupId == groupId && userId != botId

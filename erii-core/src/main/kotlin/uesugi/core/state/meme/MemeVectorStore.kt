@@ -25,8 +25,8 @@ open class MemoVectorStore {
     /**
      * 获取指定 botId 和 groupId 的向量存储
      */
-    fun getStore(botMark: String, groupId: String): VectorStore {
-        val key = "${botMark}_$groupId"
+    fun getStore(botId: String, groupId: String): VectorStore {
+        val key = "${botId}_$groupId"
         return stores.getOrPut(key) {
             val path = StorePathConfig.resolve("vector", "meme", key)
             GlobalContext.get().get { parametersOf(path, DIMENSION) }
@@ -46,7 +46,7 @@ open class MemoVectorStore {
     }
 
     open suspend fun rebuildStore(
-        botMark: String,
+        botId: String,
         groupId: String,
         memos: List<MemeRecord>
     ): List<Pair<Int, String>> {
@@ -57,7 +57,7 @@ open class MemoVectorStore {
         }.sortedBy { it.second }
 
         if (indexedMemos.isEmpty()) {
-            getStore(botMark, groupId).rebuild(emptyList())
+            getStore(botId, groupId).rebuild(emptyList())
             return emptyList()
         }
 
@@ -79,15 +79,15 @@ open class MemoVectorStore {
                 vector = vector
             )
         }
-        getStore(botMark, groupId).rebuild(items)
+        getStore(botId, groupId).rebuild(items)
         return indexedMemos.zip(items).map { (indexed, item) -> indexed.second to item.id }
     }
 
     /**
      * 生成向量ID
      */
-    fun generateVectorId(botMark: String, groupId: String, memoId: Int): String {
-        return "memo_${botMark}_${groupId}_$memoId"
+    fun generateVectorId(botId: String, groupId: String, memoId: Int): String {
+        return "memo_${botId}_${groupId}_$memoId"
     }
 
     /**

@@ -201,7 +201,7 @@ class InitialBatchProcessingTest {
     ): List<Int> = transaction(database) {
         (1..count).map { index ->
             HistoryEntity.new {
-                botMark = "bot"
+                botId = "bot"
                 groupId = "group"
                 userId = "user"
                 nick = "user"

@@ -27,12 +27,12 @@ class MemoryRepository {
      * 查找需要处理记忆的群组
      * 规则: 自上次处理后有新消息的群组
      */
-    fun findGroupsNeedProcessing(botMark: String): List<String> {
+    fun findGroupsNeedProcessing(botId: String): List<String> {
         return transaction {
             // 查询所有群组的最新消息 ID
             val allGroupIds = HistoryTable
                 .select(HistoryTable.groupId)
-                .where { HistoryTable.botMark eq botMark }
+                .where { HistoryTable.botId eq botId }
                 .groupBy(HistoryTable.groupId)
                 .map { it[HistoryTable.groupId] }
                 .distinct()
@@ -40,14 +40,14 @@ class MemoryRepository {
             // 过滤出有新消息的群组
             allGroupIds.filter { groupId ->
                 val memoryState = MemoryStateEntity.find(
-                    (MemoryStateTable.botMark eq botMark) and (MemoryStateTable.groupId eq groupId)
+                    (MemoryStateTable.botId eq botId) and (MemoryStateTable.groupId eq groupId)
                 ).firstOrNull()
 
                 val lastProcessedId = memoryState?.lastProcessedHistoryId ?: 0
 
                 // 检查是否有新消息
                 val newMessageCount = HistoryEntity.count(
-                    (HistoryTable.botMark eq botMark) and
+                    (HistoryTable.botId eq botId) and
                             (HistoryTable.groupId eq groupId) and
                             (HistoryTable.id greater lastProcessedId)
                 )
@@ -60,10 +60,10 @@ class MemoryRepository {
     /**
      * 获取记忆处理状态
      */
-    fun getMemoryState(botMark: String, groupId: String): MemoryStateRecord? {
+    fun getMemoryState(botId: String, groupId: String): MemoryStateRecord? {
         return transaction {
             MemoryStateEntity.find(
-                (MemoryStateTable.botMark eq botMark) and (MemoryStateTable.groupId eq groupId)
+                (MemoryStateTable.botId eq botId) and (MemoryStateTable.groupId eq groupId)
             ).firstOrNull()?.toRecord()
         }
     }
@@ -71,12 +71,12 @@ class MemoryRepository {
     /**
      * 更新记忆处理状态
      */
-    fun updateMemoryState(botMark: String, groupId: String, lastHistoryId: Int) {
+    fun updateMemoryState(botId: String, groupId: String, lastHistoryId: Int) {
         transaction {
             val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
 
             val existing = MemoryStateEntity.find(
-                (MemoryStateTable.botMark eq botMark) and (MemoryStateTable.groupId eq groupId)
+                (MemoryStateTable.botId eq botId) and (MemoryStateTable.groupId eq groupId)
             ).firstOrNull()
 
             if (existing != null) {
@@ -84,7 +84,7 @@ class MemoryRepository {
                 existing.lastProcessedAt = now
             } else {
                 MemoryStateEntity.new {
-                    this.botMark = botMark
+                    this.botId = botId
                     this.groupId = groupId
                     this.lastProcessedHistoryId = lastHistoryId
                     this.lastProcessedAt = now
@@ -98,14 +98,14 @@ class MemoryRepository {
      * 获取待处理的历史消息
      */
     fun getHistoriesToProcess(
-        botMark: String,
+        botId: String,
         groupId: String,
         lastHistoryId: Int,
         limit: Int = 200
     ): List<HistoryRecord> {
         return transaction {
             HistoryEntity.find(
-                (HistoryTable.botMark eq botMark) and
+                (HistoryTable.botId eq botId) and
                         (HistoryTable.groupId eq groupId) and
                         (HistoryTable.id greater lastHistoryId)
             )
@@ -120,9 +120,9 @@ class MemoryRepository {
      *
      * 用于尚未建立处理游标的群组：只处理最新窗口，更早历史作为基线数据跳过。
      */
-    fun getLatestHistories(botMark: String, groupId: String, limit: Int): List<HistoryRecord> = transaction {
+    fun getLatestHistories(botId: String, groupId: String, limit: Int): List<HistoryRecord> = transaction {
         HistoryEntity.find(
-            (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId)
+            (HistoryTable.botId eq botId) and (HistoryTable.groupId eq groupId)
         )
             .orderBy(HistoryTable.id to SortOrder.DESC)
             .limit(limit)
@@ -133,14 +133,14 @@ class MemoryRepository {
     /**
      * 查找或创建用户画像
      */
-    fun findOrCreateUserProfile(botMark: String, groupId: String, userId: String): UserProfileRecord {
+    fun findOrCreateUserProfile(botId: String, groupId: String, userId: String): UserProfileRecord {
         return transaction {
             val entity = UserProfileEntity.find(
-                (UserProfileTable.botMark eq botMark) and
+                (UserProfileTable.botId eq botId) and
                         (UserProfileTable.groupId eq groupId) and
                         (UserProfileTable.userId eq userId)
             ).firstOrNull() ?: UserProfileEntity.new {
-                this.botMark = botMark
+                this.botId = botId
                 this.groupId = groupId
                 this.userId = userId
                 this.profile = ""
@@ -151,7 +151,7 @@ class MemoryRepository {
     }
 
     fun updateUserProfile(
-        botMark: String,
+        botId: String,
         groupId: String,
         userId: String,
         profile: String,
@@ -159,11 +159,11 @@ class MemoryRepository {
     ): UserProfileRecord =
         transaction {
             val entity = UserProfileEntity.find(
-                (UserProfileTable.botMark eq botMark) and
+                (UserProfileTable.botId eq botId) and
                         (UserProfileTable.groupId eq groupId) and
                         (UserProfileTable.userId eq userId)
             ).firstOrNull() ?: UserProfileEntity.new {
-                this.botMark = botMark
+                this.botId = botId
                 this.groupId = groupId
                 this.userId = userId
             }
@@ -175,9 +175,9 @@ class MemoryRepository {
     /**
      * 获取有效的事实记忆
      */
-    fun getValidFacts(botMark: String, groupId: String): List<FactsRecord> {
+    fun getValidFacts(botId: String, groupId: String): List<FactsRecord> {
         return transaction {
-            FactsEntity.find(FactsTable.validCondition(botMark, groupId))
+            FactsEntity.find(FactsTable.validCondition(botId, groupId))
                 .map { it.toRecord() }
         }
     }
@@ -191,14 +191,14 @@ class MemoryRepository {
 
     fun getAllFactGroups(): List<Pair<String, String>> = transaction {
         FactsTable
-            .select(FactsTable.botMark, FactsTable.groupId)
+            .select(FactsTable.botId, FactsTable.groupId)
             .withDistinct(true)
-            .map { it[FactsTable.botMark] to it[FactsTable.groupId] }
+            .map { it[FactsTable.botId] to it[FactsTable.groupId] }
             .sortedWith(compareBy<Pair<String, String>> { it.first }.thenBy { it.second })
     }
 
     fun getFactsForEntityRebuild(
-        botMark: String? = null,
+        botId: String? = null,
         groupId: String? = null,
         onlyEmptyEntities: Boolean = true,
         includeInvalid: Boolean = false,
@@ -207,7 +207,7 @@ class MemoryRepository {
         val facts = FactsEntity.all()
             .map { it.toRecord() }
             .asSequence()
-            .filter { fact -> botMark == null || fact.botMark == botMark }
+            .filter { fact -> botId == null || fact.botId == botId }
             .filter { fact -> groupId == null || fact.groupId == groupId }
             .filter { fact -> !onlyEmptyEntities || fact.entities.isEmpty() }
             .filter { fact -> includeInvalid || fact.validTo == null }
@@ -227,7 +227,7 @@ class MemoryRepository {
      * 创建新的事实记忆
      */
     fun createFact(
-        botMark: String,
+        botId: String,
         groupId: String,
         keyword: String,
         description: String,
@@ -237,7 +237,7 @@ class MemoryRepository {
     ): Int {
         return transaction {
             FactsEntity.new {
-                this.botMark = botMark
+                this.botId = botId
                 this.groupId = groupId
                 this.keyword = keyword
                 this.description = description
@@ -252,12 +252,12 @@ class MemoryRepository {
     /**
      * 根据 ID 废弃事实
      */
-    fun deprecateFactsById(botMark: String, groupId: String, factId: Int, scopeType: Scopes): Boolean {
+    fun deprecateFactsById(botId: String, groupId: String, factId: Int, scopeType: Scopes): Boolean {
         return transaction {
             val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
             FactsTable.update({
                 (FactsTable.id eq factId) and
-                        (FactsTable.botMark eq botMark) and
+                        (FactsTable.botId eq botId) and
                         (FactsTable.groupId eq groupId) and
                         (FactsTable.scopeType eq scopeType) and
                         (FactsTable.validTo.isNull())
@@ -347,9 +347,9 @@ class MemoryRepository {
     }
 
     /** 物理删除用户画像 */
-    fun deleteUserProfile(botMark: String, groupId: String, userId: String): Boolean = transaction {
+    fun deleteUserProfile(botId: String, groupId: String, userId: String): Boolean = transaction {
         val entity = UserProfileEntity.find {
-            (UserProfileTable.botMark eq botMark) and
+            (UserProfileTable.botId eq botId) and
                     (UserProfileTable.groupId eq groupId) and
                     (UserProfileTable.userId eq userId)
         }.firstOrNull()
@@ -359,14 +359,14 @@ class MemoryRepository {
 
     /** 查询未处理消息 */
     fun getUnprocessedMessages(
-        botMark: String,
+        botId: String,
         groupId: String,
         userId: String?,
         lastHistoryId: Int,
         limit: Int
     ): List<HistoryRecord> = transaction {
         val query = HistoryEntity.find {
-            (HistoryTable.botMark eq botMark) and
+            (HistoryTable.botId eq botId) and
                     (HistoryTable.groupId eq groupId) and
                     (HistoryTable.id greater lastHistoryId)
         }.orderBy(HistoryTable.id to SortOrder.ASC).limit(limit)

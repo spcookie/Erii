@@ -310,7 +310,7 @@ class MemoryAgent(
      * Step 4: 统一向量同步 → Embedding → Vector Store
      */
     suspend fun organize(
-        botMark: String,
+        botId: String,
         groupId: String,
         messages: List<HistoryRecord>
     ) {
@@ -327,7 +327,7 @@ class MemoryAgent(
 
         // Step 2: 获取已有事实
         val existingFacts = withContext(Dispatchers.IO) {
-            memoryRepository.getValidFacts(botMark, groupId)
+            memoryRepository.getValidFacts(botId, groupId)
         }
 
         if (extraction.facts.isEmpty()) {
@@ -362,7 +362,7 @@ class MemoryAgent(
 
         // Step 4: 批量执行决策
         val affectedFacts = executeDecisions(
-            botMark = botMark,
+            botId = botId,
             groupId = groupId,
             decisions = allDecisions,
             proposedFacts = extraction.facts,
@@ -370,10 +370,10 @@ class MemoryAgent(
         )
 
         // Step 4.5: 同步图存储（实体三元组）
-        syncGraph(affectedFacts, botMark, groupId)
+        syncGraph(affectedFacts, botId, groupId)
 
         // Step 5: 统一向量同步
-        syncVectors(botMark, groupId, affectedFacts)
+        syncVectors(botId, groupId, affectedFacts)
 
         log.info(
             "Memory organization completed, groupId=$groupId, " +
@@ -613,7 +613,7 @@ class MemoryAgent(
     // ==================== Step 3: 批量执行决策 ====================
 
     private suspend fun executeDecisions(
-        botMark: String,
+        botId: String,
         groupId: String,
         decisions: List<MemoryDecision>,
         proposedFacts: List<ExtractedFact>,
@@ -631,7 +631,7 @@ class MemoryAgent(
                 log.warn("Skipped memory ADD not present in extracted facts, groupId=$groupId, keyword=${requestedFact.keyword}")
                 return@forEach
             }
-            createAndFetchFact(botMark, groupId, proposedFact)?.let { created ->
+            createAndFetchFact(botId, groupId, proposedFact)?.let { created ->
                 added.add(created)
                 successfulAdds.add(proposedFact to created)
             }
@@ -669,7 +669,7 @@ class MemoryAgent(
             approvedDeletes.forEach { (decision, candidate) ->
                 val deprecated = withContext(Dispatchers.IO) {
                     memoryRepository.deprecateFactsById(
-                        botMark = botMark,
+                        botId = botId,
                         groupId = groupId,
                         factId = candidate.id,
                         scopeType = candidate.scopeType
@@ -691,13 +691,13 @@ class MemoryAgent(
     }
 
     private suspend fun createAndFetchFact(
-        botMark: String,
+        botId: String,
         groupId: String,
         fact: ExtractedFact
     ): FactsRecord? {
         val id = withContext(Dispatchers.IO) {
             memoryRepository.createFact(
-                botMark, groupId,
+                botId, groupId,
                 fact.keyword, fact.description,
                 fact.entities, fact.subjects, fact.scope
             )
@@ -709,23 +709,23 @@ class MemoryAgent(
 
     // ==================== Step 4: 统一向量同步 ====================
 
-    private fun syncGraph(affectedFacts: AffectedFacts, botMark: String, groupId: String) {
+    private fun syncGraph(affectedFacts: AffectedFacts, botId: String, groupId: String) {
         for (added in affectedFacts.added) {
             factGraphStoreFactory.addFactEntities(added)
         }
         for (deleted in affectedFacts.deleted) {
-            factGraphStoreFactory.removeFactEntities(deleted.id, botMark, groupId)
+            factGraphStoreFactory.removeFactEntities(deleted.id, botId, groupId)
         }
     }
 
     private suspend fun syncVectors(
-        botMark: String,
+        botId: String,
         groupId: String,
         affectedFacts: AffectedFacts
     ) {
         for (deleted in affectedFacts.deleted) {
             deleted.vectorId?.let { vectorId ->
-                factVectorStoreFactory.deleteVector(vectorId, botMark, groupId)
+                factVectorStoreFactory.deleteVector(vectorId, botId, groupId)
                 log.debug("Old vector deleted, factId=${deleted.id}, vectorId=$vectorId")
             }
         }

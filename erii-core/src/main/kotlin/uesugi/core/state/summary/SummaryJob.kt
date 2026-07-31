@@ -65,7 +65,7 @@ class SummaryJob(
         force: Boolean
     ): StateWorkResult = UsageContext.withUsage(key.botId, key.groupId) {
         summaryService.processSummaryForGroup(
-            botMark = key.botId,
+            botId = key.botId,
             groupId = key.groupId,
             batchLimit = policy.batchLimit,
             minimumMessages = policy.minMessages,

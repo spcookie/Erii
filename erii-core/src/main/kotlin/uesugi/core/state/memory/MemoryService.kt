@@ -39,7 +39,7 @@ class MemoryService(
      * 处理单个群组的记忆
      */
     suspend fun processGroupMemory(
-        botMark: String,
+        botId: String,
         groupId: String,
         batchLimit: Int = ConfigHolder.getStateTuning().memory.batchLimit,
         minimumMessages: Int = ConfigHolder.getStateTuning().memory.minMessages,
@@ -50,16 +50,16 @@ class MemoryService(
         try {
             // 1. 获取需要处理的历史消息
             val memoryState = withContext(Dispatchers.IO) {
-                memoryRepository.getMemoryState(botMark, groupId)
+                memoryRepository.getMemoryState(botId, groupId)
             }
             val initialBatch = memoryState == null
             val lastId = memoryState?.lastProcessedHistoryId ?: 0
 
             val histories = withContext(Dispatchers.IO) {
                 if (initialBatch) {
-                    memoryRepository.getLatestHistories(botMark, groupId, batchLimit)
+                    memoryRepository.getLatestHistories(botId, groupId, batchLimit)
                 } else {
-                    memoryRepository.getHistoriesToProcess(botMark, groupId, lastId, batchLimit)
+                    memoryRepository.getHistoriesToProcess(botId, groupId, lastId, batchLimit)
                 }
             }
 
@@ -85,7 +85,7 @@ class MemoryService(
                 log.debug("群组 $groupId 过滤后无有效消息,跳过处理")
                 val maxHistoryId = histories.maxOf { it.id!! }
                 withContext(Dispatchers.IO) {
-                    memoryRepository.updateMemoryState(botMark, groupId, maxHistoryId)
+                    memoryRepository.updateMemoryState(botId, groupId, maxHistoryId)
                 }
                 return StateWorkResult(
                     histories.size,
@@ -102,15 +102,15 @@ class MemoryService(
                 // 4.1 用户画像和偏好 (按用户)
                 val profileJob = async {
                     messagesByUser
-                        .filterKeys { it != botMark }
+                        .filterKeys { it != botId }
                         .all { (userId, userMessages) ->
-                            processUserProfile(botMark, groupId, userId, userMessages)
+                            processUserProfile(botId, groupId, userId, userMessages)
                         }
                 }
 
                 // 4.2 事实记忆提取
                 val factsJob = async {
-                    organizeFacts(botMark, groupId, messages)
+                    organizeFacts(botId, groupId, messages)
                 }
 
                 profileJob.await() && factsJob.await()
@@ -124,7 +124,7 @@ class MemoryService(
             // 5. 更新记忆处理状态
             val maxHistoryId = histories.maxOf { it.id!! }
             withContext(Dispatchers.IO) {
-                memoryRepository.updateMemoryState(botMark, groupId, maxHistoryId)
+                memoryRepository.updateMemoryState(botId, groupId, maxHistoryId)
             }
 
             log.debug("群组 $groupId 记忆处理完成, 最大 historyId=$maxHistoryId")
@@ -150,15 +150,15 @@ class MemoryService(
      * 4. 统一向量同步
      */
     private suspend fun organizeFacts(
-        botMark: String,
+        botId: String,
         groupId: String,
         messages: List<HistoryRecord>
     ): Boolean {
         try {
             log.debug("开始整理事实记忆, groupId=$groupId, message count=${messages.size}")
-            memoryAgent.organize(botMark, groupId, messages)
+            memoryAgent.organize(botId, groupId, messages)
 
-            log.info("Fact memory sorting completed, botId=$botMark, groupId=$groupId")
+            log.info("Fact memory sorting completed, botId=$botId, groupId=$groupId")
             return true
         } catch (e: Exception) {
             log.error("Failed to organize fact memory, groupId=$groupId", e)
@@ -170,7 +170,7 @@ class MemoryService(
      * 处理用户画像
      */
     private suspend fun processUserProfile(
-        botMark: String,
+        botId: String,
         groupId: String,
         userId: String,
         messages: List<HistoryRecord>
@@ -179,15 +179,15 @@ class MemoryService(
             log.debug("开始处理用户画像, groupId=$groupId, userId=$userId")
 
             val existing = withContext(Dispatchers.IO) {
-                memoryRepository.findOrCreateUserProfile(botMark, groupId, userId)
+                memoryRepository.findOrCreateUserProfile(botId, groupId, userId)
             }
 
             val analysis = memoryAgent.analyzeUserProfile(messages, existing)
 
             // 保存到数据库
             withContext(Dispatchers.IO) {
-                memoryRepository.updateUserProfile(botMark, groupId, userId, analysis.profile, analysis.preferences)
-                log.info("User portrait has been updated, botId=$botMark, groupId=$groupId, userId=$userId")
+                memoryRepository.updateUserProfile(botId, groupId, userId, analysis.profile, analysis.preferences)
+                log.info("User portrait has been updated, botId=$botId, groupId=$groupId, userId=$userId")
             }
             return true
 
@@ -198,7 +198,7 @@ class MemoryService(
     }
 
     suspend fun recallFactsForAgent(
-        botMark: String,
+        botId: String,
         groupId: String,
         subjects: List<String>,
         query: String,
@@ -209,14 +209,14 @@ class MemoryService(
         if (query.isBlank() || candidateLimit <= 0) return emptyList()
 
         val bm25Results = try {
-            factVectorStoreFactory.searchByKeyword(query, groupId, botMark, candidateLimit)
+            factVectorStoreFactory.searchByKeyword(query, groupId, botId, candidateLimit)
         } catch (e: Exception) {
             log.warn("BM25 search failed for agent fact recall", e)
             emptyList()
         }
 
         val vectorResults = try {
-            factVectorStoreFactory.search(query, groupId, botMark, candidateLimit)
+            factVectorStoreFactory.search(query, groupId, botId, candidateLimit)
         } catch (e: Exception) {
             log.warn("Vector search failed for agent fact recall", e)
             emptyList()
@@ -229,7 +229,7 @@ class MemoryService(
         ).filter { it.score >= minScore }
 
         val seedFactsById = getVisibleFactEntitiesByIds(
-            botMark = botMark,
+            botId = botId,
             groupId = groupId,
             subjects = subjects,
             factIds = seedResults.mapNotNull { it.factId }
@@ -239,7 +239,7 @@ class MemoryService(
         }
 
         val expandedFacts = if (graphLimit > 0) {
-            expandByGraph(botMark, groupId, subjects, seedFacts, graphLimit)
+            expandByGraph(botId, groupId, subjects, seedFacts, graphLimit)
         } else {
             emptyList()
         }
@@ -251,7 +251,7 @@ class MemoryService(
     }
 
     suspend fun searchFactsVector(
-        botMark: String,
+        botId: String,
         groupId: String,
         query: String,
         limit: Int = 10
@@ -262,14 +262,14 @@ class MemoryService(
         val effectiveLimit = limit.coerceAtMost(100)
 
         val bm25Results = try {
-            factVectorStoreFactory.searchByKeyword(query, groupId, botMark, effectiveLimit)
+            factVectorStoreFactory.searchByKeyword(query, groupId, botId, effectiveLimit)
         } catch (e: Exception) {
             log.warn("Management BM25 search failed for facts", e)
             emptyList()
         }
 
         val vectorResults = try {
-            factVectorStoreFactory.search(query, groupId, botMark, effectiveLimit)
+            factVectorStoreFactory.search(query, groupId, botId, effectiveLimit)
         } catch (e: Exception) {
             log.warn("Management vector search failed for facts", e)
             emptyList()
@@ -280,7 +280,7 @@ class MemoryService(
             vectorResults = vectorResults,
             limit = effectiveLimit
         )
-        val factsById = getValidFactRecordsByIds(botMark, groupId, mergedResults.mapNotNull { it.factId })
+        val factsById = getValidFactRecordsByIds(botId, groupId, mergedResults.mapNotNull { it.factId })
         val results = mergedResults.mapNotNull { result ->
             val fact = result.factId?.let { factsById[it] } ?: return@mapNotNull null
             MemoryFactSearchResult(
@@ -341,13 +341,13 @@ class MemoryService(
         }
 
         var factCount = 0
-        groups.forEach { (botMark, groupId) ->
+        groups.forEach { (botId, groupId) ->
             val facts = withContext(Dispatchers.IO) {
-                memoryRepository.getValidFacts(botMark, groupId)
+                memoryRepository.getValidFacts(botId, groupId)
             }
             factCount += facts.size
             val indexed = factVectorStoreFactory.rebuildStore(
-                botMark = botMark,
+                botId = botId,
                 groupId = groupId,
                 facts = facts
             )
@@ -363,15 +363,15 @@ class MemoryService(
         log.info("Fact vector stores rebuilt, groups=${groups.size}, facts=$factCount")
         return MemoryRebuildResult(
             facts = factCount,
-            groups = groups.map { (botMark, groupId) -> "$botMark:$groupId" }
+            groups = groups.map { (botId, groupId) -> "$botId:$groupId" }
         )
     }
 
     fun rebuildFactGraphs(): MemoryRebuildResult {
         val groups = memoryRepository.getAllFactGroups()
 
-        groups.forEach { (botMark, groupId) ->
-            factGraphStoreFactory.rebuildStore(botMark, groupId)
+        groups.forEach { (botId, groupId) ->
+            factGraphStoreFactory.rebuildStore(botId, groupId)
         }
         val removedStores = factGraphStoreFactory.removeOrphanStores(groups)
         if (removedStores.isNotEmpty()) {
@@ -382,12 +382,12 @@ class MemoryService(
         log.info("Fact graph stores rebuilt, groups=${groups.size}, facts=$factCount")
         return MemoryRebuildResult(
             facts = factCount,
-            groups = groups.map { (botMark, groupId) -> "$botMark:$groupId" }
+            groups = groups.map { (botId, groupId) -> "$botId:$groupId" }
         )
     }
 
     suspend fun searchFactsGraph(
-        botMark: String,
+        botId: String,
         groupId: String,
         query: String,
         limit: Int = 10
@@ -402,21 +402,21 @@ class MemoryService(
             )
         }
         val effectiveLimit = limit.coerceAtMost(100)
-        val vectorResponse = searchFactsVector(botMark, groupId, query, effectiveLimit)
+        val vectorResponse = searchFactsVector(botId, groupId, query, effectiveLimit)
         val seedResults = vectorResponse.results.map { it.copy(source = "seed") }
         val seedIds = seedResults.map { it.fact.id }
 
-        val entityNames = factGraphStoreFactory.expandByFacts(seedIds, botMark, groupId).distinct()
+        val entityNames = factGraphStoreFactory.expandByFacts(seedIds, botId, groupId).distinct()
         val expandedIds = if (entityNames.isEmpty()) {
             emptyList()
         } else {
-            factGraphStoreFactory.expandByEntities(entityNames, botMark, groupId)
+            factGraphStoreFactory.expandByEntities(entityNames, botId, groupId)
                 .distinct()
                 .filter { it !in seedIds }
                 .take(effectiveLimit)
         }
 
-        val expandedFactsById = getValidFactRecordsByIds(botMark, groupId, expandedIds)
+        val expandedFactsById = getValidFactRecordsByIds(botId, groupId, expandedIds)
         val expandedResults = expandedIds.mapNotNull { factId ->
             expandedFactsById[factId]?.let { fact ->
                 MemoryFactSearchResult(
@@ -446,7 +446,7 @@ class MemoryService(
      * 正向：seed facts → entities（SPARQL 反向查询）→ more facts（SPARQL 正向查询）
      */
     private fun expandByGraph(
-        botMark: String,
+        botId: String,
         groupId: String,
         subjects: List<String>,
         seedFacts: List<FactsEntity>,
@@ -456,11 +456,11 @@ class MemoryService(
         if (seedIds.isEmpty()) return emptyList()
 
         // 反向：seed fact IDs → entities
-        val entityNames = factGraphStoreFactory.expandByFacts(seedIds, botMark, groupId)
+        val entityNames = factGraphStoreFactory.expandByFacts(seedIds, botId, groupId)
         if (entityNames.isEmpty()) return emptyList()
 
         // 正向：entities → more fact IDs
-        val expandedFactIds = factGraphStoreFactory.expandByEntities(entityNames, botMark, groupId)
+        val expandedFactIds = factGraphStoreFactory.expandByEntities(entityNames, botId, groupId)
         val seedIdSet = seedIds.toSet()
         val novelIds = expandedFactIds.filter { it !in seedIdSet }
 
@@ -469,7 +469,7 @@ class MemoryService(
 
         return transaction {
             FactsEntity.find {
-                (FactsTable.id inList novelIds) and FactsTable.validCondition(botMark, groupId)
+                (FactsTable.id inList novelIds) and FactsTable.validCondition(botId, groupId)
             }
                 .filter { fact -> fact.isVisibleTo(subjects) }
                 .sortedBy { fact -> order[fact.id.value] ?: Int.MAX_VALUE }
@@ -478,7 +478,7 @@ class MemoryService(
     }
 
     private fun getVisibleFactEntitiesByIds(
-        botMark: String,
+        botId: String,
         groupId: String,
         subjects: List<String>,
         factIds: List<Int>
@@ -488,7 +488,7 @@ class MemoryService(
 
         return transaction {
             FactsEntity.find {
-                (FactsTable.id inList ids) and FactsTable.validCondition(botMark, groupId)
+                (FactsTable.id inList ids) and FactsTable.validCondition(botId, groupId)
             }
                 .filter { fact -> fact.isVisibleTo(subjects) }
                 .associateBy { it.id.value }
@@ -496,7 +496,7 @@ class MemoryService(
     }
 
     private fun getValidFactRecordsByIds(
-        botMark: String,
+        botId: String,
         groupId: String,
         factIds: List<Int>
     ): Map<Int, FactsRecord> {
@@ -505,7 +505,7 @@ class MemoryService(
 
         return transaction {
             FactsEntity.find {
-                (FactsTable.id inList ids) and FactsTable.validCondition(botMark, groupId)
+                (FactsTable.id inList ids) and FactsTable.validCondition(botId, groupId)
             }.associate { it.id.value to it.toRecord() }
         }
     }
@@ -585,25 +585,25 @@ class MemoryService(
     private fun deleteVectors(facts: List<FactsRecord>) {
         facts.forEach { fact ->
             fact.vectorId?.let { vectorId ->
-                factVectorStoreFactory.deleteVector(vectorId, fact.botMark, fact.groupId)
+                factVectorStoreFactory.deleteVector(vectorId, fact.botId, fact.groupId)
             }
         }
     }
 
     private fun deleteGraphs(facts: List<FactsRecord>) {
         facts.forEach { fact ->
-            factGraphStoreFactory.removeFactEntities(fact.id, fact.botMark, fact.groupId)
+            factGraphStoreFactory.removeFactEntities(fact.id, fact.botId, fact.groupId)
         }
     }
 
     fun getAllFactsByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
     ): Pair<List<FactsEntity>, Int> {
         return transaction {
-            val condition = FactsTable.validCondition(botMark, groupId)
+            val condition = FactsTable.validCondition(botId, groupId)
             val baseQuery = FactsEntity.find { condition }
             val total = baseQuery.count().toInt()
             val query = FactsTable
@@ -625,27 +625,27 @@ class MemoryService(
      * Results are sorted newest first before offset/limit are applied.
      */
     fun getAllFactsByGroupForManagement(
-        botMark: String,
+        botId: String,
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
     ): Pair<List<FactsEntity>, Int> = getAllFactsByGroupForManagement(
-        botMark,
+        botId,
         groupId,
         ManageListQuery(offset = offset, limit = limit)
     )
 
     fun getAllFactsByGroupForManagement(
-        botMark: String,
+        botId: String,
         groupId: String,
         listQuery: ManageListQuery
     ): Pair<List<FactsEntity>, Int> {
         return transaction {
-            var condition: Op<Boolean> = (FactsTable.botMark eq botMark) and (FactsTable.groupId eq groupId)
+            var condition: Op<Boolean> = (FactsTable.botId eq botId) and (FactsTable.groupId eq groupId)
             if (listQuery.search.isNotBlank()) {
                 condition = when (listQuery.search.lowercase()) {
-                    "valid" -> condition and FactsTable.validCondition(botMark, groupId)
-                    "invalid" -> condition and not(FactsTable.validCondition(botMark, groupId))
+                    "valid" -> condition and FactsTable.validCondition(botId, groupId)
+                    "invalid" -> condition and not(FactsTable.validCondition(botId, groupId))
                     else -> {
                         val matchingScopes = Scopes.entries.filter {
                             it.name.lowercase().contains(listQuery.search.lowercase())
@@ -669,7 +669,7 @@ class MemoryService(
                 "id" -> query.orderBy(FactsTable.id to listQuery.sortOrder)
                 "valid" -> {
                     val validity = case()
-                        .When(FactsTable.validCondition(botMark, groupId), intLiteral(1))
+                        .When(FactsTable.validCondition(botId, groupId), intLiteral(1))
                         .Else(intLiteral(0))
                     query.orderBy(validity to listQuery.sortOrder, FactsTable.id to listQuery.sortOrder)
                 }
@@ -687,22 +687,22 @@ class MemoryService(
     }
 
     fun getFactSize(
-        botMark: String,
+        botId: String,
         groupId: String
     ): Long {
         return transaction {
-            FactsEntity.find { FactsTable.validCondition(botMark, groupId) }.count()
+            FactsEntity.find { FactsTable.validCondition(botId, groupId) }.count()
         }
     }
 
     fun getUserProfiles(
-        botMark: String,
+        botId: String,
         groupId: String,
         userId: List<String>
     ): List<UserProfileEntity> {
         return transaction {
             UserProfileEntity.find {
-                (UserProfileTable.botMark eq botMark) and
+                (UserProfileTable.botId eq botId) and
                         (UserProfileTable.groupId eq groupId) and
                         (UserProfileTable.userId inList userId)
             }.toList()
@@ -710,24 +710,24 @@ class MemoryService(
     }
 
     fun getAllUserProfilesByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         offset: Int = 0,
         limit: Int = 0
     ): Pair<List<UserProfileEntity>, Int> = getAllUserProfilesByGroup(
-        botMark,
+        botId,
         groupId,
         ManageListQuery(offset = offset, limit = limit, sortBy = "createdAt", ascending = true)
     )
 
     fun getAllUserProfilesByGroup(
-        botMark: String,
+        botId: String,
         groupId: String,
         listQuery: ManageListQuery
     ): Pair<List<UserProfileEntity>, Int> {
         return transaction {
             var condition: Op<Boolean> =
-                (UserProfileTable.botMark eq botMark) and
+                (UserProfileTable.botId eq botId) and
                         (UserProfileTable.groupId eq groupId)
             if (listQuery.search.isNotBlank()) {
                 condition = condition and (
@@ -757,24 +757,24 @@ class MemoryService(
     }
 
     fun getUserProfileSize(
-        botMark: String,
+        botId: String,
         groupId: String
     ): Long {
         return transaction {
             UserProfileEntity.find {
-                (UserProfileTable.botMark eq botMark) and
+                (UserProfileTable.botId eq botId) and
                         (UserProfileTable.groupId eq groupId)
             }.count()
         }
     }
 
     fun getSummary(
-        botMark: String,
+        botId: String,
         groupId: String
     ): SummaryEntity? {
         return transaction {
             SummaryEntity.find {
-                (SummaryTable.botMark eq botMark) and
+                (SummaryTable.botId eq botId) and
                         (SummaryTable.groupId eq groupId)
             }.orderBy(SummaryTable.createdAt to SortOrder.DESC)
                 .firstOrNull()
@@ -783,7 +783,7 @@ class MemoryService(
 
     fun deleteFact(botId: String, groupId: String, id: Int): Boolean {
         val fact = memoryRepository.getFactById(id) ?: return false
-        if (fact.botMark != botId || fact.groupId != groupId) return false
+        if (fact.botId != botId || fact.groupId != groupId) return false
         fact.vectorId?.let { vectorId ->
             factVectorStoreFactory.deleteVector(vectorId, botId, groupId)
         }
@@ -792,7 +792,7 @@ class MemoryService(
     }
 
     suspend fun createFact(
-        botMark: String,
+        botId: String,
         groupId: String,
         keyword: String,
         description: String,
@@ -801,7 +801,7 @@ class MemoryService(
         scopeType: Scopes
     ): FactsRecord? {
         val id = withContext(Dispatchers.IO) {
-            memoryRepository.createFact(botMark, groupId, keyword, description, entities, subjects, scopeType)
+            memoryRepository.createFact(botId, groupId, keyword, description, entities, subjects, scopeType)
         }
         val fact = withContext(Dispatchers.IO) {
             memoryRepository.getFactById(id)
@@ -811,7 +811,7 @@ class MemoryService(
     }
 
     suspend fun updateFact(
-        botMark: String,
+        botId: String,
         groupId: String,
         id: Int,
         keyword: String,
@@ -821,11 +821,11 @@ class MemoryService(
         scopeType: Scopes
     ): FactsRecord? {
         val existing = memoryRepository.getFactById(id) ?: return null
-        if (existing.botMark != botMark || existing.groupId != groupId) return null
+        if (existing.botId != botId || existing.groupId != groupId) return null
         existing.vectorId?.let { vectorId ->
-            factVectorStoreFactory.deleteVector(vectorId, botMark, groupId)
+            factVectorStoreFactory.deleteVector(vectorId, botId, groupId)
         }
-        factGraphStoreFactory.removeFactEntities(id, botMark, groupId)
+        factGraphStoreFactory.removeFactEntities(id, botId, groupId)
         val updated = withContext(Dispatchers.IO) {
             memoryRepository.updateFact(id, keyword, description, entities, subjects, scopeType)
         } ?: return null
@@ -838,7 +838,7 @@ class MemoryService(
             factVectorStoreFactory.indexFact(fact)
         } catch (e: Exception) {
             log.warn(
-                "Failed to sync fact vector, factId=${fact.id}, botId=${fact.botMark}, groupId=${fact.groupId}",
+                "Failed to sync fact vector, factId=${fact.id}, botId=${fact.botId}, groupId=${fact.groupId}",
                 e
             )
             return fact

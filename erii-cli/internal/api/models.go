@@ -47,7 +47,7 @@ type BehaviorProfile struct {
 
 type FactRecord struct {
 	ID          int      `json:"id"`
-	BotMark     string   `json:"botMark"`
+	BotID     string   `json:"botId"`
 	GroupID     string   `json:"groupId"`
 	Keyword     string   `json:"keyword"`
 	Description string   `json:"description"`
@@ -112,7 +112,7 @@ type MemoryGraphSearchResponse struct {
 
 type UserProfileRecord struct {
 	ID          int    `json:"id"`
-	BotMark     string `json:"botMark"`
+	BotID     string `json:"botId"`
 	GroupID     string `json:"groupId"`
 	UserID      string `json:"userId"`
 	Profile     string `json:"profile"`
@@ -172,7 +172,7 @@ type MemeVectorSearchResponse struct {
 
 type VocabRecord struct {
 	ID        int    `json:"id"`
-	BotMark   string `json:"botMark"`
+	BotID   string `json:"botId"`
 	GroupID   string `json:"groupId"`
 	Word      string `json:"word"`
 	Type      string `json:"type"`
@@ -195,7 +195,7 @@ type VocabRequest struct {
 
 type SummaryRecord struct {
 	ID               int     `json:"id"`
-	BotMark          string  `json:"botMark"`
+	BotID          string  `json:"botId"`
 	GroupID          string  `json:"groupId"`
 	TimeRange        string  `json:"timeRange"`
 	Content          string  `json:"content"`
@@ -217,7 +217,7 @@ type UpdateSummaryRequest struct {
 
 type HistoryRecord struct {
 	ID          int            `json:"id"`
-	BotMark     string         `json:"botMark"`
+	BotID     string         `json:"botId"`
 	GroupID     string         `json:"groupId"`
 	UserID      string         `json:"userId"`
 	Nick        string         `json:"nick"`
@@ -242,7 +242,7 @@ type UpdateHistoryRequest struct {
 
 type ResourceRecord struct {
 	ID        int    `json:"id"`
-	BotMark   string `json:"botMark"`
+	BotID   string `json:"botId"`
 	GroupID   string `json:"groupId"`
 	URL       string `json:"url"`
 	FileName  string `json:"fileName"`
@@ -255,7 +255,7 @@ type ResourceRecord struct {
 
 type EmotionRecord struct {
 	ID                      int             `json:"id"`
-	BotMark                 string          `json:"botMark"`
+	BotID                 string          `json:"botId"`
 	GroupID                 string          `json:"groupId"`
 	EmotionalTendency       string          `json:"emotionalTendency"`
 	Stimulus                PAD             `json:"stimulus"`
@@ -277,7 +277,7 @@ type UpdateEmotionRequest struct {
 
 type FlowRecord struct {
 	ID                     int     `json:"id"`
-	BotMark                string  `json:"botMark"`
+	BotID                string  `json:"botId"`
 	GroupID                string  `json:"groupId"`
 	LastProcessedHistoryId int     `json:"lastProcessedHistoryId"`
 	LastProcessedAt        string  `json:"lastProcessedAt"`
@@ -295,7 +295,7 @@ type UpdateFlowRequest struct {
 
 type VolitionRecord struct {
 	ID                     int     `json:"id"`
-	BotMark                string  `json:"botMark"`
+	BotID                string  `json:"botId"`
 	GroupID                string  `json:"groupId"`
 	Fatigue                float64 `json:"fatigue"`
 	Stimulus               float64 `json:"stimulus"`

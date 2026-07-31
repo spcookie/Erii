@@ -17,7 +17,7 @@ import uesugi.common.toolkit.LocalDateTimeAsDateSerializer
 object HistoryTable : IntIdTable("chat_history") {
     const val DEFAULT_LENGTH = 64
 
-    val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+    val botId = varchar("bot_id", length = DEFAULT_LENGTH)
     val groupId = varchar("group_id", length = DEFAULT_LENGTH)
     val userId = varchar("user_id", length = DEFAULT_LENGTH)
     val nick = varchar("nick", length = DEFAULT_LENGTH)
@@ -37,7 +37,7 @@ object HistoryTable : IntIdTable("chat_history") {
 class HistoryEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<HistoryEntity>(HistoryTable)
 
-    var botMark by HistoryTable.botMark
+    var botId by HistoryTable.botId
     var groupId by HistoryTable.groupId
     var userId by HistoryTable.userId
     var nick by HistoryTable.nick
@@ -61,7 +61,7 @@ enum class MessageType {
 @Serializable
 data class HistoryRecord(
     var id: Int? = null,
-    var botMark: String,
+    var botId: String,
     var groupId: String,
     var userId: String,
     var nick: String,
@@ -74,7 +74,7 @@ data class HistoryRecord(
 fun ResourceEntity.toRecord(): ResourceRecord {
     return ResourceRecord(
         id = id.value,
-        botMark = botMark,
+        botId = botId,
         groupId = groupId,
         url = url,
         fileName = fileName,
@@ -87,7 +87,7 @@ fun ResourceEntity.toRecord(): ResourceRecord {
 fun HistoryEntity.toRecord(): HistoryRecord {
     return HistoryRecord(
         id = id.value,
-        botMark = botMark,
+        botId = botId,
         groupId = groupId,
         userId = userId,
         nick = nick,

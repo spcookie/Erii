@@ -25,7 +25,7 @@ class MessageAwaiterIsolationTest {
     }
 
     private fun history(botId: String, groupId: String, userId: String) = HistoryRecord(
-        botMark = botId,
+        botId = botId,
         groupId = groupId,
         userId = userId,
         nick = userId,

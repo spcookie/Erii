@@ -112,7 +112,7 @@ class StateCursorRepositoryTest {
         transaction(database) {
             (1..count).map { index ->
                 HistoryEntity.new {
-                    botMark = botId
+                    this.botId = botId
                     this.groupId = groupId
                     userId = "user-$index"
                     nick = "user"

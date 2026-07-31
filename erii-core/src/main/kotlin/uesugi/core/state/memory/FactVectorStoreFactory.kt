@@ -46,8 +46,8 @@ open class FactVectorStoreFactory {
     /**
      * 获取指定 botId 和 groupId 的向量存储
      */
-    open fun getStore(botMark: String, groupId: String): VectorStore {
-        val key = "${botMark}_$groupId"
+    open fun getStore(botId: String, groupId: String): VectorStore {
+        val key = "${botId}_$groupId"
         return stores.getOrPut(key) {
             val path = StorePathConfig.resolve("vector", "fact", key)
             GlobalContext.get().get { parametersOf(path, DIMENSION) }
@@ -59,18 +59,18 @@ open class FactVectorStoreFactory {
      * @return 向量ID
      */
     open suspend fun indexFact(fact: FactsRecord): String {
-        val botMark = fact.botMark
+        val botId = fact.botId
         val groupId = fact.groupId
         val factId = fact.id
 
-        val vectorId = generateVectorId(botMark, groupId, factId)
+        val vectorId = generateVectorId(botId, groupId, factId)
 
         val content = fact.description
 
         val vector: FloatArray = withContext(Dispatchers.IO) {
             EmbeddingManager.get().embedding(listOf(content)).first()
         }
-        val store = getStore(botMark, groupId)
+        val store = getStore(botId, groupId)
         store.upsert(vectorId, content, fact.scopeType.name, vector, buildFactKeywordSearchText(fact))
 
         return vectorId
@@ -82,13 +82,13 @@ open class FactVectorStoreFactory {
     open suspend fun search(
         query: String,
         groupId: String,
-        botMark: String,
+        botId: String,
         topK: Int
     ): List<FactSearchResult> {
         val vector: FloatArray = withContext(Dispatchers.IO) {
             EmbeddingManager.get().embedding(listOf(query)).first()
         }
-        val store = getStore(botMark, groupId)
+        val store = getStore(botId, groupId)
         val results = store.search(vector, topK)
 
         return results.map { result ->
@@ -105,18 +105,18 @@ open class FactVectorStoreFactory {
     /**
      * 删除向量
      */
-    open fun deleteVector(vectorId: String, botMark: String, groupId: String) {
-        val store = getStore(botMark, groupId)
+    open fun deleteVector(vectorId: String, botId: String, groupId: String) {
+        val store = getStore(botId, groupId)
         store.delete(vectorId)
     }
 
-    open fun clearStore(botMark: String, groupId: String) {
-        getStore(botMark, groupId).deleteAll()
+    open fun clearStore(botId: String, groupId: String) {
+        getStore(botId, groupId).deleteAll()
     }
 
-    open suspend fun rebuildStore(botMark: String, groupId: String, facts: List<FactsRecord>): List<Pair<Int, String>> {
+    open suspend fun rebuildStore(botId: String, groupId: String, facts: List<FactsRecord>): List<Pair<Int, String>> {
         if (facts.isEmpty()) {
-            getStore(botMark, groupId).rebuild(emptyList())
+            getStore(botId, groupId).rebuild(emptyList())
             return emptyList()
         }
 
@@ -129,7 +129,7 @@ open class FactVectorStoreFactory {
         }
         val items = pairFactsWithVectorsForRebuild(orderedFacts, vectors).map { (fact, vector) ->
             VectorStoreItem(
-                id = generateVectorId(fact.botMark, fact.groupId, fact.id),
+                id = generateVectorId(fact.botId, fact.groupId, fact.id),
                 content = fact.description,
                 tag = fact.scopeType.name,
                 vector = vector,
@@ -137,13 +137,13 @@ open class FactVectorStoreFactory {
             )
         }
 
-        getStore(botMark, groupId).rebuild(items)
+        getStore(botId, groupId).rebuild(items)
         return orderedFacts.zip(items).map { (fact, item) -> fact.id to item.id }
     }
 
     open fun removeOrphanStores(activeGroups: List<Pair<String, String>>): List<String> {
         val root = StorePathConfig.resolve("vector", "fact")
-        val activeKeys = activeGroups.mapTo(hashSetOf()) { (botMark, groupId) -> "${botMark}_$groupId" }
+        val activeKeys = activeGroups.mapTo(hashSetOf()) { (botId, groupId) -> "${botId}_$groupId" }
         return removeOrphanStoreDirectories(root, activeKeys) { key ->
             stores.remove(key)?.close()
         }
@@ -152,8 +152,8 @@ open class FactVectorStoreFactory {
     /**
      * 生成向量ID
      */
-    open fun generateVectorId(botMark: String, groupId: String, factId: Int): String {
-        return "fact_${botMark}_${groupId}_$factId"
+    open fun generateVectorId(botId: String, groupId: String, factId: Int): String {
+        return "fact_${botId}_${groupId}_$factId"
     }
 
     /**
@@ -162,10 +162,10 @@ open class FactVectorStoreFactory {
     open fun searchByKeyword(
         query: String,
         groupId: String,
-        botMark: String,
+        botId: String,
         topK: Int
     ): List<FactSearchResult> {
-        val store = getStore(botMark, groupId)
+        val store = getStore(botId, groupId)
         val results = store.searchText(query, topK)
 
         return results.map { result ->

@@ -174,7 +174,7 @@ class MemeService(
         groups.forEach { (candidateBotId, candidateGroupId) ->
             val analyzedMemos = repository.getAnalyzedMemesForRebuild(candidateBotId, candidateGroupId)
             val indexed = vectorStoreFactory.rebuildStore(
-                botMark = candidateBotId,
+                botId = candidateBotId,
                 groupId = candidateGroupId,
                 memos = analyzedMemos
             )
@@ -289,8 +289,8 @@ class MemeService(
         }
     }
 
-    fun latestHistoryId(botMark: String, groupId: String): Int? {
-        return repository.latestHistoryId(botMark, groupId)
+    fun latestHistoryId(botId: String, groupId: String): Int? {
+        return repository.latestHistoryId(botId, groupId)
     }
 
     /**

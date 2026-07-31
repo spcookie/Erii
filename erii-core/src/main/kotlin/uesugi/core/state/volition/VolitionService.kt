@@ -53,7 +53,7 @@ data class VolitionState(
 
 class VolitionGauge(
     private var mood: EmotionalTendencies,
-    private val botMark: String,
+    private val botId: String,
     private val groupId: String,
     private val baseDesire: Double = 15.0,
     private val tuning: VolitionTuningConfig = VolitionTuningConfig(),
@@ -94,11 +94,11 @@ class VolitionGauge(
                 delay(decayIntervalMs.milliseconds)
                 val gauge = this@VolitionGauge
                 if (gauge.shouldSpeak()) {
-                    log.info("决策: 机器人 $botMark 群组 $groupId 应该主动发言!")
+                    log.info("决策: 机器人 $botId 群组 $groupId 应该主动发言!")
 
                     EventBus.postAsync(
                         ProactiveSpeakEvent(
-                            botId = botMark,
+                            botId = botId,
                             _groupId = groupId,
                             interruptionMode = InterruptionMode.Interrupt,
                         )
@@ -119,21 +119,21 @@ class VolitionGauge(
         try {
             transaction {
                 val volitionState = VolitionStateEntity.find {
-                    (VolitionStateTable.botMark eq botMark) and (VolitionStateTable.groupId eq groupId)
+                    (VolitionStateTable.botId eq botId) and (VolitionStateTable.groupId eq groupId)
                 }.orderBy(VolitionStateTable.lastProcessedAt to SortOrder.DESC).firstOrNull()
 
                 if (volitionState != null) {
                     state.fatigue = volitionState.fatigue
                     state.stimulus = volitionState.stimulus
                     state.lastActiveTime = volitionState.lastActiveTime
-                    log.debug("从数据库加载主动意愿状态, botId=$botMark, groupId=$groupId, fatigue=${state.fatigue}, stimulus=${state.stimulus}")
+                    log.debug("从数据库加载主动意愿状态, botId=$botId, groupId=$groupId, fatigue=${state.fatigue}, stimulus=${state.stimulus}")
                 } else {
                     state.stimulus = baseDesire
-                    log.debug("群组 botId=$botMark, groupId=$groupId 没有主动意愿状态记录, 使用默认值, stimulus=$baseDesire")
+                    log.debug("群组 botId=$botId, groupId=$groupId 没有主动意愿状态记录, 使用默认值, stimulus=$baseDesire")
                 }
             }
         } catch (e: Exception) {
-            log.error("加载主动意愿状态失败, botId=$botMark, groupId=$groupId", e)
+            log.error("加载主动意愿状态失败, botId=$botId, groupId=$groupId", e)
         }
     }
 
@@ -141,24 +141,24 @@ class VolitionGauge(
         try {
             transaction {
                 val volitionState = VolitionStateEntity.find {
-                    (VolitionStateTable.botMark eq botMark) and (VolitionStateTable.groupId eq groupId)
+                    (VolitionStateTable.botId eq botId) and (VolitionStateTable.groupId eq groupId)
                 }.orderBy(VolitionStateTable.lastProcessedAt to SortOrder.DESC).firstOrNull()
 
                 if (volitionState != null) {
                     volitionState.fatigue = state.fatigue
                     volitionState.stimulus = state.stimulus
                     volitionState.lastActiveTime = state.lastActiveTime
-                    log.debug("持久化主动意愿状态, botId=$botMark, groupId=$groupId, fatigue=${state.fatigue}, stimulus=${state.stimulus}")
+                    log.debug("持久化主动意愿状态, botId=$botId, groupId=$groupId, fatigue=${state.fatigue}, stimulus=${state.stimulus}")
                 }
             }
         } catch (e: Exception) {
-            log.error("持久化主动意愿状态失败, botId=$botMark, groupId=$groupId", e)
+            log.error("持久化主动意愿状态失败, botId=$botId, groupId=$groupId", e)
         }
     }
 
     private fun subscribe() {
         EventBus.subscribeAsync<VolitionEvent>(scope) { event ->
-            if (event.botMark != botMark || event.groupId != groupId) {
+            if (event.botId != botId || event.groupId != groupId) {
                 return@subscribeAsync
             }
 
@@ -172,18 +172,18 @@ class VolitionGauge(
         }
 
         EventBus.subscribeAsync<EmotionChangeEvent>(scope) { event ->
-            if (event.botMark != botMark || event.groupId != groupId) {
+            if (event.botId != botId || event.groupId != groupId) {
                 return@subscribeAsync
             }
             mood = EmotionalTendencies.findClosest(event.pad)
             val (p, a, _) = event.pad.normalize()
             pleasure = p
             arousal = a
-            log.debug("Volition收到情绪变更事件, botId=$botMark, groupId=$groupId, P: $p , A: $a")
+            log.debug("Volition收到情绪变更事件, botId=$botId, groupId=$groupId, P: $p , A: $a")
         }
 
         EventBus.subscribeAsync<FlowChangeEvent>(scope) { event ->
-            if (event.botMark != botMark || event.groupId != groupId) {
+            if (event.botId != botId || event.groupId != groupId) {
                 return@subscribeAsync
             }
             flowValue = event.value
@@ -209,17 +209,17 @@ class VolitionGauge(
 
     fun minusStimulus(amount: Double) {
         state.minusStimulus(amount)
-        log.debug("刺激值重置: $amount, botId=$botMark, groupId=$groupId")
+        log.debug("刺激值重置: $amount, botId=$botId, groupId=$groupId")
     }
 
     fun addStimulus(amount: Double) {
         state.addStimulus(amount)
-        log.debug("刺激值增加: +$amount, 当前刺激值: ${state.stimulus}, botId=$botMark, groupId=$groupId")
+        log.debug("刺激值增加: +$amount, 当前刺激值: ${state.stimulus}, botId=$botId, groupId=$groupId")
     }
 
     fun addFatigue(amount: Double) {
         state.addFatigue(amount)
-        log.debug("疲劳值增加: +$amount, 当前疲劳值: ${state.fatigue}, botId=$botMark, groupId=$groupId")
+        log.debug("疲劳值增加: +$amount, 当前疲劳值: ${state.fatigue}, botId=$botId, groupId=$groupId")
     }
 
     fun decayFatigue() {
@@ -262,22 +262,22 @@ class VolitionGaugeManager {
         private val log = logger()
     }
 
-    fun getOrCreate(botMark: String, groupId: String, mood: EmotionalTendencies): VolitionGauge {
-        val key = "$botMark:$groupId"
+    fun getOrCreate(botId: String, groupId: String, mood: EmotionalTendencies): VolitionGauge {
+        val key = "$botId:$groupId"
         return gauges.getOrPut(key) {
-            log.debug("创建新的VolitionGauge实例, botId=$botMark, groupId=$groupId")
-            val configKey = BotManage.getConfigKey(botMark)
+            log.debug("创建新的VolitionGauge实例, botId=$botId, groupId=$groupId")
+            val configKey = BotManage.getConfigKey(botId)
             val onebotBots = ConfigHolder.getOnebotBots()
             val tuning = ConfigHolder.getStateTuning().volition
             val desire = onebotBots[configKey]?.let {
                 it.groups[groupId]?.desire
             } ?: tuning.baseDesireDefault
-            VolitionGauge(mood, botMark, groupId, desire, tuning)
+            VolitionGauge(mood, botId, groupId, desire, tuning)
         }
     }
 
-    fun get(botMark: String, groupId: String): VolitionGauge? {
-        val key = "$botMark:$groupId"
+    fun get(botId: String, groupId: String): VolitionGauge? {
+        val key = "$botId:$groupId"
         return gauges[key]
     }
 

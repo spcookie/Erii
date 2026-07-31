@@ -56,17 +56,17 @@ class FlowJob(
         }
     }
 
-    private fun ensureFlowGaugeExists(botMark: String, groupId: String) {
+    private fun ensureFlowGaugeExists(botId: String, groupId: String) {
         val flowGaugeManager by GlobalContext.get().inject<FlowGaugeManager>()
-        val configKey = BotManage.getConfigKey(botMark)
+        val configKey = BotManage.getConfigKey(botId)
         val baseDesire = ConfigHolder.getOnebotBots()[configKey]?.groups?.get(groupId)?.desire
             ?: ConfigHolder.getStateTuning().volition.baseDesireDefault
-        flowGaugeManager.getOrCreate(botMark, groupId, BotManage.getBot(botMark).role.emoticon, baseDesire)
+        flowGaugeManager.getOrCreate(botId, groupId, BotManage.getBot(botId).role.emoticon, baseDesire)
     }
 
     @OptIn(ExperimentalTime::class)
     private suspend fun processGroupFlow(
-        botMark: String,
+        botId: String,
         groupId: String,
         policy: StateWorkPolicy,
         force: Boolean
@@ -75,12 +75,12 @@ class FlowJob(
 
         try {
             val flowState = withContext(Dispatchers.IO) {
-                flowRepository.getFlowState(botMark, groupId)
+                flowRepository.getFlowState(botId, groupId)
             }
             val lastId = flowState?.lastProcessedHistoryId ?: 0
 
             val histories = withContext(Dispatchers.IO) {
-                flowRepository.getLatestHistoriesToProcess(botMark, groupId, lastId, policy.batchLimit)
+                flowRepository.getLatestHistoriesToProcess(botId, groupId, lastId, policy.batchLimit)
             }
 
             if (histories.isEmpty() || (!force && histories.size < policy.minMessages)) {
@@ -104,25 +104,25 @@ class FlowJob(
                 log.debug("群组 $groupId 消息转换后为空, 跳过处理")
                 val maxHistoryId = histories.maxOf { it.id.value }
                 withContext(Dispatchers.IO) {
-                    flowRepository.updateFlowState(botMark, groupId, maxHistoryId)
+                    flowRepository.updateFlowState(botId, groupId, maxHistoryId)
                 }
                 return StateWorkResult(histories.size, maxHistoryId, hasMore = false)
             }
 
             if (flowState == null) {
                 withContext(Dispatchers.IO) {
-                    flowRepository.updateFlowState(botMark, groupId, lastId)
+                    flowRepository.updateFlowState(botId, groupId, lastId)
                 }
             }
 
-            val success = flowAgent.analysis(messages, botMark, groupId)
+            val success = flowAgent.analysis(messages, botId, groupId)
             if (!success) {
-                throw IllegalStateException("Flow analysis failed, botId=$botMark, groupId=$groupId")
+                throw IllegalStateException("Flow analysis failed, botId=$botId, groupId=$groupId")
             }
 
             val maxHistoryId = histories.maxOf { it.id.value }
             withContext(Dispatchers.IO) {
-                flowRepository.updateFlowState(botMark, groupId, maxHistoryId)
+                flowRepository.updateFlowState(botId, groupId, maxHistoryId)
             }
 
             log.debug("群组 $groupId 心流处理完成, 最大 historyId=$maxHistoryId")

@@ -17,7 +17,7 @@ import uesugi.common.toolkit.LocalDateTimeAsDateSerializer
 object ResourceTable : IntIdTable("chat_resource") {
     const val DEFAULT_LENGTH = 255
 
-    val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+    val botId = varchar("bot_id", length = DEFAULT_LENGTH)
     val groupId = varchar("group_id", length = DEFAULT_LENGTH)
 
     val url = varchar("url", length = 1024)
@@ -34,7 +34,7 @@ object ResourceTable : IntIdTable("chat_resource") {
 class ResourceEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<ResourceEntity>(ResourceTable)
 
-    var botMark by ResourceTable.botMark
+    var botId by ResourceTable.botId
     var groupId by ResourceTable.groupId
     var url by ResourceTable.url
     var fileName by ResourceTable.fileName
@@ -48,7 +48,7 @@ class ResourceEntity(id: EntityID<Int>) : IntEntity(id) {
 @Serializable
 data class ResourceRecord(
     val id: Int? = null,
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val url: String,
     val fileName: String,
@@ -64,7 +64,7 @@ data class ResourceRecord(
 
         if (id != other.id) return false
         if (size != other.size) return false
-        if (botMark != other.botMark) return false
+        if (botId != other.botId) return false
         if (groupId != other.groupId) return false
         if (url != other.url) return false
         if (fileName != other.fileName) return false
@@ -79,7 +79,7 @@ data class ResourceRecord(
     override fun hashCode(): Int {
         var result = id ?: 0
         result = 31 * result + size.hashCode()
-        result = 31 * result + botMark.hashCode()
+        result = 31 * result + botId.hashCode()
         result = 31 * result + groupId.hashCode()
         result = 31 * result + url.hashCode()
         result = 31 * result + fileName.hashCode()

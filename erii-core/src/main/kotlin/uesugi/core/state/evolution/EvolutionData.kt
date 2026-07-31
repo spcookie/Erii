@@ -29,7 +29,7 @@ import uesugi.core.state.emotion.EmotionTable.DEFAULT_LENGTH
  * - createdAt: 创建时间
  */
 object LearnedVocabTable : IntIdTable("learned_vocab") {
-    val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+    val botId = varchar("bot_id", length = DEFAULT_LENGTH)
     val groupId = varchar("group_id", length = DEFAULT_LENGTH)
 
     val word = varchar("word", 255)
@@ -43,34 +43,34 @@ object LearnedVocabTable : IntIdTable("learned_vocab") {
 }
 
 object EvolutionStateTable : IntIdTable("evolution_state") {
-    val botMark = varchar("bot_mark", length = DEFAULT_LENGTH)
+    val botId = varchar("bot_id", length = DEFAULT_LENGTH)
     val groupId = varchar("group_id", length = DEFAULT_LENGTH)
     val lastProcessedHistoryId = integer("last_processed_history_id").default(0)
     val lastProcessedAt = datetime("last_processed_at").defaultExpression(CurrentDateTime)
 
     init {
-        uniqueIndex(botMark, groupId)
+        uniqueIndex(botId, groupId)
     }
 }
 
 class EvolutionStateEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<EvolutionStateEntity>(EvolutionStateTable)
 
-    var botMark by EvolutionStateTable.botMark
+    var botId by EvolutionStateTable.botId
     var groupId by EvolutionStateTable.groupId
     var lastProcessedHistoryId by EvolutionStateTable.lastProcessedHistoryId
     var lastProcessedAt by EvolutionStateTable.lastProcessedAt
 }
 
 data class EvolutionStateRecord(
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val lastProcessedHistoryId: Int,
     val lastProcessedAt: LocalDateTime
 )
 
 fun EvolutionStateEntity.toStateRecord() = EvolutionStateRecord(
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     lastProcessedHistoryId = lastProcessedHistoryId,
     lastProcessedAt = lastProcessedAt
@@ -84,7 +84,7 @@ data class EvolutionHistoryMessage(val id: Int, val content: String)
 class LearnedVocabEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<LearnedVocabEntity>(LearnedVocabTable)
 
-    var botMark by LearnedVocabTable.botMark
+    var botId by LearnedVocabTable.botId
     var groupId by LearnedVocabTable.groupId
     var word by LearnedVocabTable.word
     var type by LearnedVocabTable.type
@@ -101,7 +101,7 @@ class LearnedVocabEntity(id: EntityID<Int>) : IntEntity(id) {
 @Serializable
 data class LearnedVocabRecord(
     val id: Int,
-    val botMark: String,
+    val botId: String,
     val groupId: String,
     val word: String,
     val type: String,
@@ -117,7 +117,7 @@ data class LearnedVocabRecord(
  */
 fun LearnedVocabEntity.toRecord(): LearnedVocabRecord = LearnedVocabRecord(
     id = id.value,
-    botMark = botMark,
+    botId = botId,
     groupId = groupId,
     word = word,
     type = type,

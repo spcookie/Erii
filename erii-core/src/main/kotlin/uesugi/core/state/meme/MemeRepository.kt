@@ -53,7 +53,7 @@ class MemeRepository {
     fun findByMd5(botId: String, groupId: String, md5: String): MemeRecord? {
         return transaction {
             MemeEntity.find {
-                (MemeTable.botMark eq botId) and
+                (MemeTable.botId eq botId) and
                         (MemeTable.groupId eq groupId) and
                         (MemeTable.md5 eq md5)
             }.firstOrNull()?.toRecord()
@@ -82,7 +82,7 @@ class MemeRepository {
     ): MemeRecord {
         return transaction {
             val existing = MemeEntity.find {
-                (MemeTable.botMark eq botId) and
+                (MemeTable.botId eq botId) and
                         (MemeTable.groupId eq groupId) and
                         (MemeTable.md5 eq md5)
             }.firstOrNull()
@@ -118,7 +118,7 @@ class MemeRepository {
                 }
 
                 MemeEntity.new {
-                    this.botMark = botId
+                    this.botId = botId
                     this.groupId = groupId
                     this.resourceId = resourceId
                     this.md5 = md5
@@ -213,7 +213,7 @@ class MemeRepository {
     fun getAllMemos(botId: String, groupId: String, listQuery: ManageListQuery): Pair<List<MemeRecord>, Int> {
         return transaction {
             var condition: Op<Boolean> =
-                (MemeTable.botMark eq botId) and (MemeTable.groupId eq groupId)
+                (MemeTable.botId eq botId) and (MemeTable.groupId eq groupId)
             if (listQuery.search.isNotBlank()) {
                 condition = condition and (
                         (MemeTable.md5.lowerCase() like listQuery.searchPattern) or
@@ -256,7 +256,7 @@ class MemeRepository {
         return transaction {
             val analyzeThreshold = ConfigHolder.getStateTuning().meme.analyzeThreshold
             MemeEntity.find {
-                (MemeTable.botMark eq botId) and
+                (MemeTable.botId eq botId) and
                         (MemeTable.groupId eq groupId) and
                         (MemeTable.seenCount greaterEq analyzeThreshold)
             }.map { it.toRecord() }
@@ -283,13 +283,13 @@ class MemeRepository {
             val query = if (groupId.isBlank()) {
                 // 获取所有群组的已分析表情包
                 MemeEntity.find {
-                    (MemeTable.botMark eq botId) and
+                    (MemeTable.botId eq botId) and
                             (MemeTable.lastAnalyzedCount greaterEq analyzeThreshold)
                 }
             } else {
                 // 获取指定群组的已分析表情包
                 MemeEntity.find {
-                    (MemeTable.botMark eq botId) and
+                    (MemeTable.botId eq botId) and
                             (MemeTable.groupId eq groupId) and
                             (MemeTable.lastAnalyzedCount greaterEq analyzeThreshold)
                 }
@@ -300,7 +300,7 @@ class MemeRepository {
 
     fun getAnalyzedMemesForRebuild(botId: String, groupId: String): List<MemeRecord> = transaction {
         MemeEntity.find {
-            (MemeTable.botMark eq botId) and
+            (MemeTable.botId eq botId) and
                     (MemeTable.groupId eq groupId) and
                     (MemeTable.lastAnalyzedCount greater 0)
         }
@@ -309,9 +309,9 @@ class MemeRepository {
 
     fun getAllMemeGroups(): List<Pair<String, String>> = transaction {
         MemeTable
-            .select(MemeTable.botMark, MemeTable.groupId)
+            .select(MemeTable.botId, MemeTable.groupId)
             .withDistinct(true)
-            .map { it[MemeTable.botMark] to it[MemeTable.groupId] }
+            .map { it[MemeTable.botId] to it[MemeTable.groupId] }
             .sortedWith(compareBy<Pair<String, String>> { it.first }.thenBy { it.second })
     }
 
@@ -340,7 +340,7 @@ class MemeRepository {
     ): MemeRecord {
         return transaction {
             MemeEntity.new {
-                this.botMark = botId
+                this.botId = botId
                 this.groupId = groupId
                 this.resourceId = resourceId
                 this.md5 = md5
@@ -400,10 +400,10 @@ class MemeRepository {
         }
     }
 
-    fun latestHistoryId(botMark: String, groupId: String): Int? = transaction {
+    fun latestHistoryId(botId: String, groupId: String): Int? = transaction {
         HistoryTable
             .select(HistoryTable.id)
-            .where { (HistoryTable.botMark eq botMark) and (HistoryTable.groupId eq groupId) }
+            .where { (HistoryTable.botId eq botId) and (HistoryTable.groupId eq groupId) }
             .orderBy(HistoryTable.id to SortOrder.DESC)
             .limit(1)
             .firstOrNull()
@@ -421,7 +421,7 @@ class MemeRepository {
     fun getScanState(botId: String, groupId: String): MemeScanStateRecord? {
         return transaction {
             MemeScanStateEntity.find {
-                (MemeScanStateTable.botMark eq botId) and (MemeScanStateTable.groupId eq groupId)
+                (MemeScanStateTable.botId eq botId) and (MemeScanStateTable.groupId eq groupId)
             }.firstOrNull()?.toRecord()
         }
     }
@@ -436,7 +436,7 @@ class MemeRepository {
     fun updateScanState(botId: String, groupId: String, lastHistoryId: Int) {
         transaction {
             val existing = MemeScanStateEntity.find {
-                (MemeScanStateTable.botMark eq botId) and (MemeScanStateTable.groupId eq groupId)
+                (MemeScanStateTable.botId eq botId) and (MemeScanStateTable.groupId eq groupId)
             }.firstOrNull()
 
             if (existing != null) {
@@ -444,7 +444,7 @@ class MemeRepository {
                 existing.lastScanAt = System.now().toLocalDateTime(TimeZone.currentSystemDefault())
             } else {
                 MemeScanStateEntity.new {
-                    this.botMark = botId
+                    this.botId = botId
                     this.groupId = groupId
                     this.lastHistoryId = lastHistoryId
                     this.lastScanAt = System.now().toLocalDateTime(TimeZone.currentSystemDefault())
@@ -471,7 +471,7 @@ class MemeRepository {
     ): List<ImageMessageWithMd5> {
         return transaction {
             // 构建基础条件
-            val baseCondition = (HistoryTable.botMark eq botId) and
+            val baseCondition = (HistoryTable.botId eq botId) and
                     (HistoryTable.groupId eq groupId) and
                     (HistoryTable.messageType eq MessageType.IMAGE)
 

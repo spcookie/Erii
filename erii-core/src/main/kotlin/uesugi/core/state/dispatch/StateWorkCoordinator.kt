@@ -72,7 +72,7 @@ class StateWorkCoordinator(
             .asSequence()
             .filter { it.accepts(record) }
             .forEach { processor ->
-                signal(StateWorkKey(record.botMark, record.groupId, processor.kind))
+                signal(StateWorkKey(record.botId, record.groupId, processor.kind))
             }
     }
 

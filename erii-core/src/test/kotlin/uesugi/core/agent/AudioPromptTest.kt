@@ -136,7 +136,7 @@ class AudioPromptTest {
 
     private fun audioHistory(userId: String = "user-a") = HistoryRecord(
         id = 1,
-        botMark = "bot-a",
+        botId = "bot-a",
         groupId = "group-a",
         userId = userId,
         nick = "Alice",
@@ -144,7 +144,7 @@ class AudioPromptTest {
         content = "ignored audio content",
         resource = ResourceRecord(
             id = 10,
-            botMark = "bot-a",
+            botId = "bot-a",
             groupId = "group-a",
             url = "./audio/group-a/voice.mp3",
             fileName = "voice.mp3",
