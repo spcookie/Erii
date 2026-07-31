@@ -79,7 +79,6 @@ dependencies {
     implementation(libs.flexmark.html2md)
     implementation(libs.flexmark.ext.tables)
     implementation(libs.clikt)
-    implementation(libs.hutool.core)
     implementation(libs.lunar)
     implementation(libs.typesafe.config)
     implementation(libs.snakeyaml)
