@@ -88,7 +88,7 @@ internal suspend fun buildPrompt(
                         item { line { text("回应完毕后应输出 <end_tern> 或调用 sendSilent() 结束。") } }
                     }
                     if (!supportsVision) {
-                        line { text("图片：包含图片ID：image_id") }
+                        line { text("图片：包含图片ID：image_id；需要理解图片内容时调用 understandImage。") }
                     }
                     if (!supportsAudio) {
                         line { text("音频：包含音频ID：audio_id；需要理解音频内容时调用 transcribeAudio。") }
@@ -114,11 +114,10 @@ internal suspend fun buildPrompt(
 
             val prefix = "${DateTimeFormat.format(history.createdAt)} [${history.nick}](${history.userId}): "
 
-            if (history.messageType == MessageType.IMAGE && supportsVision) {
+            if (history.messageType == MessageType.IMAGE) {
                 val imageSource = imageSources[history.id]
                 if (imageSource != null) {
                     user {
-                        text(prefix + (history.content ?: ""))
                         image(imageSource)
                     }
                 } else {
@@ -129,7 +128,6 @@ internal suspend fun buildPrompt(
                 val audioSource = audioSources[history.id]
                 if (supportsAudio && audioSource != null) {
                     user {
-                        text("$prefix[音频]")
                         audio(audioSource)
                     }
                 } else {
