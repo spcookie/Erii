@@ -307,7 +307,9 @@ class KspAnnotationProcessor(
                 appendLine("package $pkgName")
                 appendLine()
                 appendLine("import uesugi.spi.MetaToolSet")
+                appendLine("import uesugi.spi.Meta")
                 appendLine("import uesugi.spi.PluginContext")
+                appendLine("import uesugi.spi.annotation.withMeta")
                 appendLine("import uesugi.spi.annotation.withPluginContext")
                 appendLine("import ai.koog.agents.core.tools.annotations.Tool as KoogTool")
                 appendLine("import ai.koog.agents.core.tools.annotations.LLMDescription as KoogLLMDescription")
@@ -322,7 +324,9 @@ class KspAnnotationProcessor(
                     appendLine("import $pkgName.${fd.funcName} as _erii_${fd.funcName}")
                 }
                 appendLine()
-                appendLine("class $className(private val context: PluginContext) : MetaToolSet {")
+                appendLine(
+                    "class $className(private val context: PluginContext, override val meta: Meta) : MetaToolSet {"
+                )
 
                 for (fd in funcsData) {
                     if (fd.chatMsgAnno != null) {
@@ -335,9 +339,9 @@ class KspAnnotationProcessor(
 
                     val argsStr = fd.argNames.joinToString(", ")
                     val callExpr = if (fd.funcIsSuspend) {
-                        "withPluginContext(context) { _erii_${fd.funcName}($argsStr) }"
+                        "withMeta(meta) { withPluginContext(context) { _erii_${fd.funcName}($argsStr) } }"
                     } else {
-                        "withPluginContext(context) { withContext(Dispatchers.IO) { _erii_${fd.funcName}($argsStr) } }"
+                        "withMeta(meta) { withPluginContext(context) { withContext(Dispatchers.IO) { _erii_${fd.funcName}($argsStr) } } }"
                     }
 
                     if (fd.paramDecls.isEmpty()) {
@@ -613,7 +617,7 @@ class KspAnnotationProcessor(
                 }
             }
             for (tsClass in toolSetClasses) {
-                appendLine("        context.tool { { $pkgName.$tsClass(context) } }")
+                appendLine("        context.tool { { meta -> $pkgName.$tsClass(context, meta) } }")
             }
             appendLine("    }")
             appendLine()
@@ -743,7 +747,7 @@ class KspAnnotationProcessor(
             defaultToolSetEmitted = true
         }
         val tsClassName = toolSetClassName(setName)
-        appendLine("${indent}context.tool { { $packageName.$tsClassName(context) } }")
+        appendLine("${indent}context.tool { { meta -> $packageName.$tsClassName(context, meta) } }")
     }
 
     private fun StringBuilder.emitLifecycleCalls(calls: List<String>, indent: String) {

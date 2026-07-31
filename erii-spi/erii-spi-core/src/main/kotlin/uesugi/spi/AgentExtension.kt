@@ -198,7 +198,8 @@ interface RouteExtension<Plugin : AgentPlugin> : AgentExtension<Plugin> {
 interface PassiveExtension<Plugin : AgentPlugin> : AgentExtension<Plugin>
 
 typealias Handler = suspend PluginContext.(meta: Meta) -> Unit
-typealias MetaToolSetCreator = () -> MetaToolSet
+/** Creates a fresh tool set whose metadata is bound to one bot/group invocation. */
+typealias MetaToolSetCreator = (Meta) -> MetaToolSet
 
 interface Scheduler {
     /** 周期调度 - cron 表达式 */
@@ -253,9 +254,8 @@ interface PluginContextBootstrap : PluginContext, AutoCloseable {
 }
 
 interface MetaToolSet : ToolSet {
-    companion object {
-        lateinit var meta: Meta
-    }
+    /** Immutable metadata for this tool set invocation; never shared across bot/group sessions. */
+    val meta: Meta
 }
 
 interface PluginDef {

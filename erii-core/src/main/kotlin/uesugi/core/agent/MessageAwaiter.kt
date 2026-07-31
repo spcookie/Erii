@@ -18,7 +18,7 @@ import uesugi.common.event.ProactiveSpeakEvent
 import uesugi.common.toolkit.ref
 import uesugi.core.message.history.HistorySavedEvent
 import uesugi.core.route.MetaToolSetRegister
-import uesugi.spi.MetaToolSet.Companion.meta
+import uesugi.plugin.MetaImpl
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.ExperimentalTime
 import kotlin.uuid.ExperimentalUuidApi
@@ -74,7 +74,7 @@ class MessageAwaiter(val context: Context) : AutoCloseable, CoroutineScope {
 
         historyJob = EventBus.subscribeAsync<HistorySavedEvent>(this) { event ->
             val record = event.historyRecord
-            if (record.groupId == context.groupId && record.userId != context.currentBotId) {
+            if (record.isMessageFor(context.currentBotId, context.groupId)) {
                 if (!event.isAtBot) {
                     relevanceChannel.send(RelevanceType.Message)
                 }
@@ -98,19 +98,16 @@ class MessageAwaiter(val context: Context) : AutoCloseable, CoroutineScope {
         input: String? = null
     ): ProactiveSpeakEvent {
         val echo = Uuid.random().toHexString()
+        val meta = MetaImpl(
+            botId = botId,
+            groupId = groupId,
+            senderId = senderId,
+            roledBot = BotManage.getBot(botId),
+            input = input,
+            echo = echo
+        )
         val metaToolSets = MetaToolSetRegister.getToolSetsForBot(botId)
-            .map { toolSetApply ->
-                toolSetApply().apply {
-                    meta = _root_ide_package_.uesugi.plugin.MetaImpl(
-                        botId = botId,
-                        groupId = groupId,
-                        senderId = senderId,
-                        roledBot = BotManage.getBot(botId),
-                        input = input,
-                        echo = echo
-                    )
-                }
-            }
+            .map { createToolSet -> createToolSet(meta) }
         return ProactiveSpeakEvent(
             botId = botId,
             _groupId = groupId,
@@ -210,3 +207,6 @@ class MessageAwaiter(val context: Context) : AutoCloseable, CoroutineScope {
     }
 
 }
+
+internal fun HistoryRecord.isMessageFor(botId: String, groupId: String): Boolean =
+    botMark == botId && this.groupId == groupId && userId != botId

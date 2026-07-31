@@ -19,7 +19,7 @@ import uesugi.common.toolkit.logger
 import uesugi.core.route.MetaToolSetRegister
 import uesugi.core.state.emotion.EmotionChangeEvent
 import uesugi.core.state.flow.FlowChangeEvent
-import uesugi.spi.MetaToolSet.Companion.meta
+import uesugi.plugin.MetaImpl
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.ExperimentalUuidApi
@@ -301,19 +301,16 @@ fun speakV(
     echo: String? = null,
     interruptionMode: InterruptionMode = InterruptionMode.Interrupt,
 ) {
+    val meta = MetaImpl(
+        botId = botId,
+        groupId = groupId,
+        senderId = senderId,
+        roledBot = BotManage.getBot(botId),
+        input = input,
+        echo = echo
+    )
     val metaToolSets = MetaToolSetRegister.getToolSetsForBot(botId)
-        .map { toolSetApply ->
-            toolSetApply().apply {
-                meta = _root_ide_package_.uesugi.plugin.MetaImpl(
-                    botId = botId,
-                    groupId = groupId,
-                    senderId = senderId,
-                    roledBot = BotManage.getBot(botId),
-                    input = input,
-                    echo = echo
-                )
-            }
-        }
+        .map { createToolSet -> createToolSet(meta) }
     val event = ProactiveSpeakEvent(
         botId = botId,
         _groupId = groupId,

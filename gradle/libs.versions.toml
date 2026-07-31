@@ -19,7 +19,6 @@ arrow = "2.0.0"
 lucene = "9.12.3"
 clikt = "5.1.0"
 okio = "3.6.0"
-hutool = "5.8.26"
 jte = "3.2.3"
 lunar = "1.7.5"
 typesafe = "1.4.0"
@@ -74,7 +73,6 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
 okio = { module = "com.squareup.okio:okio-jvm", version.ref = "okio" }
-hutool-core = { module = "cn.hutool:hutool-core", version.ref = "hutool" }
 autoservice-annotations = { module = "com.google.auto.service:auto-service-annotations", version.ref = "autoservice" }
 autoservice-processor = { module = "com.google.auto.service:auto-service", version.ref = "autoservice" }
 atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }

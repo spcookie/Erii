@@ -4,21 +4,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import uesugi.spi.Meta
-import uesugi.spi.MetaToolSet
 
 suspend fun useMeta(): Meta = currentCoroutineContext()[MetaElement]?.meta
     ?: error(NO_META_ERROR)
 
-fun useToolMeta(): Lazy<Meta> = lazy { MetaToolSet.meta }
+suspend fun useToolMeta(): Lazy<Meta> = lazyOf(useMeta())
 
-suspend fun withMeta(meta: Meta, block: suspend () -> Unit) {
-    withContext(MetaElement(meta)) {
+suspend fun <T> withMeta(meta: Meta, block: suspend () -> T): T {
+    return withContext(MetaElement(meta)) {
         block()
     }
 }
 
-suspend fun withMetaIO(meta: Meta, block: suspend () -> Unit) {
-    withContext(Dispatchers.IO + MetaElement(meta)) {
+suspend fun <T> withMetaIO(meta: Meta, block: suspend () -> T): T {
+    return withContext(Dispatchers.IO + MetaElement(meta)) {
         block()
     }
 }

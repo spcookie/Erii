@@ -39,8 +39,8 @@ class RegistryCleanupTest {
         RouteRuleRegister.addRule("OTHER_ROUTE", "other route", "other")
         CmdRuleRegister.addRule("demo", "demo")
         CmdRuleRegister.addRule("other", "other")
-        MetaToolSetRegister.addToolSet("demo_tool") { object : MetaToolSet {} }
-        MetaToolSetRegister.addToolSet("other_tool") { object : MetaToolSet {} }
+        MetaToolSetRegister.addToolSet("demo_tool") { meta -> TestMetaToolSet(meta) }
+        MetaToolSetRegister.addToolSet("other_tool") { meta -> TestMetaToolSet(meta) }
         PluginCommandExampleRegistry.register("demo", "demo_ext", "demo ping", "demo command")
         PluginCommandExampleRegistry.register("other", "other_ext", "other ping", "other command")
 
@@ -58,6 +58,8 @@ class RegistryCleanupTest {
         assertEquals(listOf("other ping"), PluginCommandExampleRegistry.match("ping").map { it.example })
     }
 }
+
+private class TestMetaToolSet(override val meta: uesugi.spi.Meta) : MetaToolSet
 
 private class TestAgentPlugin : AgentPlugin()
 
