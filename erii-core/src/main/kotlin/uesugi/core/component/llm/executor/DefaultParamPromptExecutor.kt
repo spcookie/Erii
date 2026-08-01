@@ -1,4 +1,4 @@
-package uesugi.core.component.llm
+package uesugi.core.component.llm.executor
 
 import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.prompt.Prompt
@@ -9,6 +9,7 @@ import ai.koog.prompt.message.LLMChoice
 import ai.koog.prompt.message.Message
 import ai.koog.prompt.params.LLMParams
 import ai.koog.prompt.streaming.StreamFrame
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.JsonElement
 import uesugi.common.LLMModelChoice
 
@@ -35,7 +36,7 @@ class DefaultParamPromptExecutor(
         prompt: Prompt,
         model: LLModel,
         tools: List<ToolDescriptor>
-    ): kotlinx.coroutines.flow.Flow<StreamFrame> {
+    ): Flow<StreamFrame> {
         return delegate.executeStreaming(applyDefaults(prompt, model), model, tools)
     }
 

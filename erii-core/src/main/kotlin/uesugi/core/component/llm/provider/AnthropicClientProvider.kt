@@ -1,4 +1,4 @@
-package uesugi.core.component.llm
+package uesugi.core.component.llm.provider
 
 import ai.koog.http.client.ktor.KtorKoogHttpClient
 import ai.koog.prompt.executor.clients.anthropic.AnthropicClientSettings
@@ -10,7 +10,6 @@ import io.ktor.client.*
 import uesugi.common.LLMModelChoice
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.config.LLMClientProvider
-import kotlin.time.ExperimentalTime
 
 class AnthropicClientProvider : LLMClientProvider {
 
@@ -20,7 +19,6 @@ class AnthropicClientProvider : LLMClientProvider {
     private val apiKey by lazy { ConfigHolder.getLlmAnthropicApiKey() }
     private val baseUrl by lazy { ConfigHolder.getLlmAnthropicBaseUrl() }
 
-    @OptIn(ExperimentalTime::class)
     override fun createClient(baseClient: HttpClient): RetryingLLMClient {
         val models = ConfigHolder.getLlmAnthropicModels()
         val modelVersionsMap = mapOf(

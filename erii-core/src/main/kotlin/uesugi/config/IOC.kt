@@ -11,8 +11,8 @@ import org.koin.ktor.plugin.koinModule
 import uesugi.core.chat.chatModule
 import uesugi.core.cleanup.ResourceCleanupJob
 import uesugi.core.cleanup.cleanupModule
-import uesugi.core.component.llm.AnthropicClientProvider
-import uesugi.core.component.llm.OpenAIClientProvider
+import uesugi.core.component.llm.provider.AnthropicClientProvider
+import uesugi.core.component.llm.provider.OpenAIClientProvider
 import uesugi.core.component.storage.*
 import uesugi.core.component.usage.TokenUsageRepository
 import uesugi.core.cron.CronService

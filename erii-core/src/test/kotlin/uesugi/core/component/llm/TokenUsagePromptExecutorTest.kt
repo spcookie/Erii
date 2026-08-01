@@ -17,6 +17,7 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uesugi.core.component.llm.executor.TokenUsagePromptExecutor
 import uesugi.core.component.usage.TokenUsageRepository
 import uesugi.core.component.usage.TokenUsageTable
 import java.util.*

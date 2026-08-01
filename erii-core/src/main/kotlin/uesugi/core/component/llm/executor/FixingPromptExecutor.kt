@@ -1,4 +1,4 @@
-package uesugi.core.component.llm
+package uesugi.core.component.llm.executor
 
 import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.prompt.Prompt
@@ -8,6 +8,7 @@ import ai.koog.prompt.llm.LLModel
 import ai.koog.prompt.message.LLMChoice
 import ai.koog.prompt.message.Message
 import ai.koog.prompt.streaming.StreamFrame
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Wraps a [PromptExecutor] to ensure structure-fixing prompts receive
@@ -31,7 +32,7 @@ class FixingPromptExecutor(
         prompt: Prompt,
         model: LLModel,
         tools: List<ToolDescriptor>
-    ): kotlinx.coroutines.flow.Flow<StreamFrame> {
+    ): Flow<StreamFrame> {
         return delegate.executeStreaming(ensureTokens(prompt), model, tools)
     }
 

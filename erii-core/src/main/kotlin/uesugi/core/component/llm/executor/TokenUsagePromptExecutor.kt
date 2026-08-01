@@ -1,4 +1,4 @@
-package uesugi.core.component.llm
+package uesugi.core.component.llm.executor
 
 import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.prompt.Prompt

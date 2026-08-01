@@ -7,18 +7,18 @@ import io.ktor.client.engine.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.http.*
 import uesugi.common.toolkit.ConfigHolder
-import uesugi.core.component.llm.DefaultParamPromptExecutor
-import uesugi.core.component.llm.FixingPromptExecutor
-import uesugi.core.component.llm.TokenUsagePromptExecutor
+import uesugi.core.component.llm.executor.DefaultParamPromptExecutor
+import uesugi.core.component.llm.executor.FixingPromptExecutor
+import uesugi.core.component.llm.executor.TokenUsagePromptExecutor
+import uesugi.core.component.llm.executor.ToolCallRequestNormalizingPromptExecutor
+import uesugi.core.component.llm.executor.ToolCallResponseRepairingPromptExecutor
 import uesugi.core.component.usage.TokenUsageRepository
-import kotlin.time.ExperimentalTime
 
 class LLMFactory(
     private val providers: List<LLMClientProvider>,
     private val tokenUsageRepository: TokenUsageRepository
 ) {
 
-    @OptIn(ExperimentalTime::class)
     fun promptExecutor(recordUsage: Boolean = true): PromptExecutor {
         val isDebug = System.getProperty("llm.request.debug")?.toBoolean()
             ?: System.getenv("LLM_REQUEST_DEBUG")?.toBoolean()
@@ -30,8 +30,13 @@ class LLMFactory(
             .associate { it.provider to it.createClient(baseClient) }
 
         val defaultParams = ConfigHolder.getLlmDefaultParams()
+        val routedExecutor = ToolCallResponseRepairingPromptExecutor(
+            ToolCallRequestNormalizingPromptExecutor(
+                MultiLLMPromptExecutor(llmClients)
+            )
+        )
         val executor = DefaultParamPromptExecutor(
-            FixingPromptExecutor(MultiLLMPromptExecutor(llmClients)),
+            FixingPromptExecutor(routedExecutor),
             defaultParams
         )
         return if (recordUsage) {
