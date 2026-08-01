@@ -43,11 +43,12 @@ class ChatAudioTool internal constructor(
     suspend fun transcribeAudio(
         @LLMDescription("音频的 ID，从聊天信息中的 audio_id 获取") audioId: String,
     ): String {
+        log.info("LLM tool transcribeAudio started: audioId={}", audioId.take(64))
         if (audioId.isBlank()) {
-            return errorHint("音频ID(audioId)不能为空，请从聊天信息中获取有效的音频ID。")
+            return rejected("音频ID(audioId)不能为空，请从聊天信息中获取有效的音频ID。")
         }
         val id = audioId.toIntOrNull()
-            ?: return errorHint("音频ID($audioId)格式无效，应为数字ID，请检查聊天信息中的 audio_id。")
+            ?: return rejected("音频ID($audioId)格式无效，应为数字ID，请检查聊天信息中的 audio_id。")
 
         return withContext(Dispatchers.IO) {
             try {
@@ -59,7 +60,7 @@ class ChatAudioTool internal constructor(
                 }
 
                 if (resource == null) {
-                    return@withContext errorHint("未找到ID为 $audioId 的音频，请确认该音频是否仍在聊天上下文中。")
+                    return@withContext rejected("未找到ID为 $audioId 的音频，请确认该音频是否仍在聊天上下文中。")
                 }
 
                 val bytes = objectStorage.get(resource.url.toPath())
@@ -69,12 +70,26 @@ class ChatAudioTool internal constructor(
                     .substringAfterLast(".", "")
                     .lowercase()
                     .ifBlank { "bin" }
-                transcriber(bytes, format, resource.fileName)
+                val result = transcriber(bytes, format, resource.fileName)
+                log.info(
+                    "LLM tool transcribeAudio completed: audioId={}, fileName={}, format={}, bytes={}, resultChars={}",
+                    audioId,
+                    resource.fileName.take(128),
+                    format,
+                    bytes.size,
+                    result.length
+                )
+                result
             } catch (e: Exception) {
-                log.warn("transcribeAudio failed", e)
+                log.error("LLM tool transcribeAudio failed: audioId={}", audioId.take(64), e)
                 errorHint("音频转写失败：${e.message}")
             }
         }
+    }
+
+    private fun rejected(message: String): String {
+        log.warn("LLM tool transcribeAudio rejected: {}", message.take(300))
+        return errorHint(message)
     }
 
     private fun errorHint(baseMsg: String): String {

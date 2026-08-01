@@ -36,14 +36,19 @@ class ChatVisionTool(
         @LLMDescription("用于描述您希望从图像中分析或提取的内容的文本提示") prompt: String,
         @LLMDescription("图像的 ID，从聊天信息中获取") imageId: String
     ): String {
+        log.info(
+            "LLM tool understandImage started: imageId={}, promptChars={}",
+            imageId.take(64),
+            prompt.length
+        )
         if (prompt.isBlank()) {
-            return errorHint("图像分析提示(prompt)不能为空，请提供具体的分析需求描述。")
+            return rejected("图像分析提示(prompt)不能为空，请提供具体的分析需求描述。")
         }
         if (imageId.isBlank()) {
-            return errorHint("图像ID(imageId)不能为空，请从聊天信息中获取有效的图像ID。")
+            return rejected("图像ID(imageId)不能为空，请从聊天信息中获取有效的图像ID。")
         }
         val id = imageId.toIntOrNull()
-            ?: return errorHint("图像ID($imageId)格式无效，应为数字ID，请检查聊天信息中的图像ID。")
+            ?: return rejected("图像ID($imageId)格式无效，应为数字ID，请检查聊天信息中的图像ID。")
 
         return withContext(Dispatchers.IO) {
             try {
@@ -54,7 +59,7 @@ class ChatVisionTool(
                 }
 
                 if (path == null) {
-                    return@withContext errorHint("未找到ID为 $imageId 的图像，请确认该图像是否仍在聊天上下文中。")
+                    return@withContext rejected("未找到ID为 $imageId 的图像，请确认该图像是否仍在聊天上下文中。")
                 }
 
                 val bytes = objectStorage.get(path)
@@ -69,12 +74,25 @@ class ChatVisionTool(
                     else -> "image/jpeg"
                 }
                 val imageData = "data:$mimeType;base64,$base64"
-                VisionManager.get().vision(prompt, imageData)
+                val result = VisionManager.get().vision(prompt, imageData)
+                log.info(
+                    "LLM tool understandImage completed: imageId={}, mimeType={}, bytes={}, resultChars={}",
+                    imageId,
+                    mimeType,
+                    bytes.size,
+                    result.length
+                )
+                result
             } catch (e: Exception) {
-                log.warn("understandImage failed", e)
+                log.error("LLM tool understandImage failed: imageId={}", imageId.take(64), e)
                 errorHint("图像分析失败：${e.message}")
             }
         }
+    }
+
+    private fun rejected(message: String): String {
+        log.warn("LLM tool understandImage rejected: {}", message.take(300))
+        return errorHint(message)
     }
 
     private fun errorHint(baseMsg: String): String {

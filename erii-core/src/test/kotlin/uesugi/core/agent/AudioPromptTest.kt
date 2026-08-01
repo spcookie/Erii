@@ -34,8 +34,10 @@ class AudioPromptTest {
             .single()
         val source = assertIs<AttachmentSource.Audio>(attachment.source)
         val content = assertIs<AttachmentContent.Binary.Bytes>(source.content)
+        val attachmentMessage = prompt.messages.single { attachment in it.parts }
 
         assertEquals(1, reads)
+        assertTrue(attachmentMessage.textContent().contains("[Alice](user-a):"))
         assertEquals("mp3", source.format)
         assertEquals("voice.mp3", source.fileName)
         assertContentEquals(bytes, content.data)
@@ -100,6 +102,7 @@ class AudioPromptTest {
 
         assertEquals(0, reads)
         assertTrue(call.args.contains("[音频]"))
+        assertTrue(call.args.contains("[audio_id:1]"))
     }
 
     private fun context(

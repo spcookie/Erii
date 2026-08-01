@@ -1,6 +1,7 @@
 package uesugi.core.agent
 
 import ai.koog.prompt.Prompt
+import ai.koog.prompt.dsl.PromptBuilder
 import ai.koog.prompt.dsl.prompt
 import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.markdown.MarkdownContentBuilder
@@ -97,54 +98,56 @@ internal suspend fun buildPrompt(
             }
         }
         for (history in transient.histories) {
-            val isBot = context.currentBotId == history.userId
-
-            if (isBot) {
-                val call = buildBotToolCall(history, generateToolCallId(history))
-                if (call != null) {
-                    assistant {
-                        toolCall(call)
-                    }
-                    toolResult(tool = call.tool, output = "[OK]", id = call.id)
-                } else {
-                    assistant(history.content ?: "")
-                }
-                continue
-            }
-
-            val prefix = "${DateTimeFormat.format(history.createdAt)} [${history.nick}](${history.userId}): "
-
-            if (history.messageType == MessageType.IMAGE) {
-                val imageSource = imageSources[history.id]
-                if (imageSource != null) {
-                    user {
-                        image(imageSource)
-                    }
-                } else {
-                    val content = prefix + "[image_id:${history.id}] " + (history.content ?: "")
-                    user(content)
-                }
-            } else if (history.messageType == MessageType.AUDIO) {
-                val audioSource = audioSources[history.id]
-                if (supportsAudio && audioSource != null) {
-                    user {
-                        audio(audioSource)
-                    }
-                } else {
-                    user(prefix + "[audio_id:${history.id}] [音频]")
-                }
+            if (context.currentBotId == history.userId) {
+                addBotHistoryMessage(history)
             } else {
-                val content = buildString {
-                    append(prefix)
-                    if (history.messageType == MessageType.IMAGE) {
-                        append("[image_id:${history.id}] ")
-                    }
-                    append(history.content)
-                }
-                user(content)
+                addUserHistoryMessage(
+                    history = history,
+                    imageSource = imageSources[history.id],
+                    audioSource = audioSources[history.id],
+                )
             }
         }
     }
+}
+
+private fun PromptBuilder.addBotHistoryMessage(history: HistoryRecord) {
+    val call = buildBotToolCall(history, generateToolCallId(history))
+    if (call == null) {
+        assistant(history.content.orEmpty())
+        return
+    }
+
+    assistant {
+        toolCall(call)
+    }
+    toolResult(tool = call.tool, output = "[OK]", id = call.id)
+}
+
+private fun PromptBuilder.addUserHistoryMessage(
+    history: HistoryRecord,
+    imageSource: AttachmentSource.Image?,
+    audioSource: AttachmentSource.Audio?,
+) {
+    val prefix = "${DateTimeFormat.format(history.createdAt)} [${history.nick}](${history.userId}): "
+
+    when (history.messageType) {
+        MessageType.IMAGE if imageSource != null -> user {
+            text(prefix)
+            image(imageSource)
+        }
+        MessageType.AUDIO if audioSource != null -> user {
+            text(prefix)
+            audio(audioSource)
+        }
+        else -> user(prefix + history.historyContentPlaceholder())
+    }
+}
+
+private fun HistoryRecord.historyContentPlaceholder(): String = when (messageType) {
+    MessageType.IMAGE -> mediaPlaceholder("image_id", id, content ?: "[图片]")
+    MessageType.AUDIO -> mediaPlaceholder("audio_id", id, "[音频]")
+    else -> content.orEmpty()
 }
 
 private fun generateToolCallId(history: HistoryRecord): String {
@@ -178,8 +181,8 @@ private fun buildBotToolCall(history: HistoryRecord, callId: String): MessagePar
     return when (history.messageType) {
         MessageType.TEXT, MessageType.IMAGE, MessageType.AUDIO -> {
             val text = when (history.messageType) {
-                MessageType.IMAGE -> "[图片]"
-                MessageType.AUDIO -> "[音频]"
+                MessageType.IMAGE -> mediaPlaceholder("image_id", history.id, "[图片]")
+                MessageType.AUDIO -> mediaPlaceholder("audio_id", history.id, "[音频]")
                 else -> history.content ?: ""
             }
             val tool = if (isMarkdown(text)) "sendMarkdown" else "sendText"
@@ -195,6 +198,9 @@ private fun buildBotToolCall(history: HistoryRecord, callId: String): MessagePar
         else -> null
     }
 }
+
+private fun mediaPlaceholder(idLabel: String, historyId: Int?, content: String): String =
+    historyId?.let { "[$idLabel:$it] $content" } ?: content
 
 private suspend fun loadImageSource(
     context: Context,
@@ -380,6 +386,7 @@ fun MarkdownContentBuilder.buildHistoriesPrompt(histories: List<HistoryRecord>, 
         header(2, "最近群聊记录")
         line { text("输入：按时间顺序排列的聊天记录，每条包含：[发言者昵称](发言者ID): 消息内容") }
         line { text("图片：包含图片ID：image_id") }
+        line { text("音频：包含音频ID：audio_id") }
         line { text("注意：带有*号的表示你自己的发言") }
         bulleted {
             for ((id, _, _, userId, nick, messageType, content, _, createdAt) in histories) {
@@ -393,7 +400,7 @@ fun MarkdownContentBuilder.buildHistoriesPrompt(histories: List<HistoryRecord>, 
                             }]($userId): ${
                                 when (messageType) {
                                     MessageType.IMAGE -> "[image_id:$id]"
-                                    MessageType.AUDIO -> "[音频]"
+                                    MessageType.AUDIO -> "[audio_id:$id] [音频]"
                                     else -> ""
                                 }
                             } ${if (messageType == MessageType.AUDIO) "" else content}"

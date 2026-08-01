@@ -118,7 +118,12 @@ object WebSearchTool : ToolSet {
     )
     suspend fun webSearch(input: Input): String {
         val (query, specificUrls, maxResults) = input
-        log.info("webSearch query=$query, specificUrls=$specificUrls, maxResults=$maxResults")
+        log.info(
+            "LLM tool webSearch started: query={}, specificUrls={}, maxResults={}",
+            query?.take(300),
+            specificUrls?.map(::urlForLog),
+            maxResults
+        )
 
         return try {
             withContext(Dispatchers.IO) {
@@ -129,10 +134,14 @@ object WebSearchTool : ToolSet {
                     val searchQueries = if (!query.isNullOrBlank()) {
                         try {
                             val plan = rewriteQuery(query)
-                            log.info("Query rewrite: original='$query' -> rewritten=${plan.queries}")
+                            log.info(
+                                "Query rewrite: original={} -> rewritten={}",
+                                query.take(300),
+                                plan.queries.map { it.take(300) }
+                            )
                             plan.queries.take(3)
                         } catch (e: Exception) {
-                            log.warn("Query rewrite failed, using original: {}", e.message)
+                            log.warn("Query rewrite failed, using original query: {}", query.take(300), e)
                             listOf(query)
                         }
                     } else {
@@ -163,12 +172,31 @@ object WebSearchTool : ToolSet {
                         .take(effectiveMaxResults)
 
                     // Step 4: 信息聚合合成
-                    buildResultMarkdown(mergedResults)
+                    val result = buildResultMarkdown(mergedResults)
+                    log.info(
+                        "LLM tool webSearch completed: queries={}, urls={}, results={}, resultChars={}",
+                        searchQueries.size,
+                        specificUrls?.size ?: 0,
+                        mergedResults.size,
+                        result.length
+                    )
+                    result
                 }
             }
         } catch (e: Exception) {
-            log.error("webSearch failed: {}", e.message, e)
+            log.error(
+                "LLM tool webSearch failed: query={}, specificUrls={}, maxResults={}",
+                query?.take(300),
+                specificUrls?.map(::urlForLog),
+                maxResults,
+                e
+            )
             "搜索/抓取失败"
         }
     }
+
+    private fun urlForLog(url: String): String = url
+        .substringBefore('?')
+        .substringBefore('#')
+        .take(300)
 }

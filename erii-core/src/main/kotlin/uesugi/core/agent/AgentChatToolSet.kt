@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import uesugi.common.ChatMessage
 import uesugi.common.ChatToolSet
+import uesugi.common.toolkit.logger
 import uesugi.onebot.core.message.buildMessage
 import uesugi.onebot.core.model.MessageContent
 import uesugi.onebot.sdk.client.OneBotClient
@@ -27,6 +28,8 @@ class AgentChatToolSet(
     private val rateLimiter: MessageSendRateLimiter = MessageSendRateLimiter()
 ) : ChatToolSet {
 
+    private val log = logger()
+
     companion object {
         private val GIF87A = "GIF87a".toByteArray()
         private val GIF89A = "GIF89a".toByteArray()
@@ -39,6 +42,13 @@ class AgentChatToolSet(
                 sendGroupMessage(buildMessage { text(text) })
             }
         } catch (e: Exception) {
+            log.error(
+                "LLM tool sendText failed: group={}, messageCount={}, totalChars={}",
+                groupId,
+                texts.size,
+                texts.sumOf { it.length },
+                e
+            )
             return "消息发送失败，原因：" + e.message
         }
 
@@ -65,6 +75,7 @@ class AgentChatToolSet(
                 return "未找到表情包\"$tag\"，已发送文字替代"
             }
         } catch (e: Exception) {
+            log.error("LLM tool sendMeme failed: group={}, tag={}", groupId, tag.take(64), e)
             return "发送表情包消息失败，原因：" + e.message
         }
     }
@@ -116,6 +127,7 @@ class AgentChatToolSet(
                 image(file = url, url = url)
             })
         } catch (e: Exception) {
+            log.error("LLM tool sendImageByUrl failed: group={}, url={}", groupId, urlForLog(url), e)
             return "发送图片失败，原因：" + e.message
         }
 
@@ -131,7 +143,8 @@ class AgentChatToolSet(
             val contentType = conn.contentType ?: return@withContext false
 
             contentType.startsWith("image/")
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log.warn("LLM tool sendImageByUrl URL check failed: group={}, url={}", groupId, urlForLog(url), e)
             false
         }
     }
@@ -150,6 +163,13 @@ class AgentChatToolSet(
             }
             sendGroupMessage(msg)
         } catch (e: Exception) {
+            log.error(
+                "LLM tool sendAtAndText failed: group={}, userCount={}, textChars={}",
+                groupId,
+                userIds.size,
+                text?.length ?: 0,
+                e
+            )
             return "发送消息失败，原因：" + e.message
         }
 
@@ -161,6 +181,7 @@ class AgentChatToolSet(
         try {
             sendGroupMessage(buildMessage { atAll() })
         } catch (e: Exception) {
+            log.error("LLM tool sendAtAll failed: group={}", groupId, e)
             return "发送 At 全体成员消息失败， 原因：" + e.message
         }
 
@@ -174,6 +195,12 @@ class AgentChatToolSet(
                 sendGroupMessage(buildMessage { markdown(content) })
                 return "发送 Markdown 消息成功"
             } catch (e: Exception) {
+                log.error(
+                    "LLM tool sendMarkdown failed: group={}, contentChars={}",
+                    groupId,
+                    content.length,
+                    e
+                )
                 return "发送 Markdown 消息失败，原因：" + e.message
             }
         }
@@ -183,15 +210,22 @@ class AgentChatToolSet(
 
     private suspend fun canSendImage(): Boolean = try {
         client.canSendImage()
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        log.warn("Failed to query image capability: group={}", groupId, e)
         false
     }
 
     private suspend fun canSendMarkdown(): Boolean = try {
         client.canSendMarkdown()
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        log.warn("Failed to query Markdown capability: group={}", groupId, e)
         false
     }
+
+    private fun urlForLog(url: String): String = url
+        .substringBefore('?')
+        .substringBefore('#')
+        .take(300)
 
     private suspend fun sendGroupMessage(message: MessageContent) {
         rateLimiter.awaitTurn()

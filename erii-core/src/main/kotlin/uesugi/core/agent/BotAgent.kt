@@ -38,6 +38,11 @@ object BotAgent {
 
     private val log = logger()
 
+    private const val TOOL_LOG_VALUE_LIMIT = 1_000
+    private val sensitiveToolArgumentPattern = Regex(
+        """(?i)(\"?(?:api[_-]?key|authorization|credential|password|secret|signature|token)\"?\s*[:=]\s*)(\"[^\"]*\"|[^,}\s&]+)"""
+    )
+
     private val fallbackEmoticons = listOf(
         // 困惑/懵逼
         "(×_×)", "(@_@)", "(；￣Д￣)", "(⊙_⊙;)", "(￣□￣;)", "(⊙＿⊙')",
@@ -604,6 +609,20 @@ object BotAgent {
                 )
             }
 
+            onToolValidationFailed {
+                EventBus.postAsync(
+                    AgentToolCallCompleteEvent(
+                        event.botId,
+                        event.groupId,
+                        event.echo,
+                        it.toolName,
+                        it.toolArgs,
+                        null,
+                        it.message
+                    )
+                )
+            }
+
             onToolCallFailed {
                 EventBus.postAsync(
                     AgentToolCallCompleteEvent(
@@ -618,6 +637,17 @@ object BotAgent {
                 )
             }
         }
+    }
+
+    private fun toolLogValue(value: Any?): String {
+        val raw = value?.toString() ?: "null"
+        val redacted = sensitiveToolArgumentPattern.replace(raw) { match ->
+            match.groupValues[1] + "***"
+        }
+        if (redacted.length <= TOOL_LOG_VALUE_LIMIT) {
+            return redacted
+        }
+        return redacted.take(TOOL_LOG_VALUE_LIMIT) + "…(${redacted.length} chars)"
     }
 
 }

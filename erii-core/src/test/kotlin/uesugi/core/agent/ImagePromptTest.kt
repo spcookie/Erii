@@ -36,9 +36,11 @@ class ImagePromptTest {
             .single()
         val source = assertIs<AttachmentSource.Image>(attachment.source)
         val content = assertIs<AttachmentContent.Binary.Bytes>(source.content)
+        val attachmentMessage = prompt.messages.single { attachment in it.parts }
 
         assertEquals(1, reads)
         assertFalse(requestedThumbnail)
+        assertTrue(attachmentMessage.textContent().contains("[Alice](user-a):"))
         assertEquals("png", source.format)
         assertEquals("cat.png", source.fileName)
         assertContentEquals(bytes, content.data)
@@ -79,6 +81,30 @@ class ImagePromptTest {
         assertEquals(listOf(true, false), thumbnailRequests)
     }
 
+    @Test
+    fun `bot image history tool call retains image id`() = runBlocking {
+        var reads = 0
+        val prompt = buildPrompt(
+            context = context(
+                histories = listOf(imageHistory(userId = "bot-a")),
+            ) { _, _ ->
+                reads++
+                MediaResource(byteArrayOf(1), "png", "cat.png")
+            },
+            supportsVision = true,
+            supportsAudio = false,
+        )
+
+        val call = prompt.messages
+            .flatMap { it.parts }
+            .filterIsInstance<MessagePart.Tool.Call>()
+            .single()
+
+        assertEquals(0, reads)
+        assertTrue(call.args.contains("[image_id:1]"))
+        assertTrue(call.args.contains("[图片]"))
+    }
+
     private fun context(
         histories: List<HistoryRecord> = listOf(imageHistory()),
         mediaResource: suspend (HistoryRecord, Boolean) -> MediaResource?,
@@ -111,11 +137,11 @@ class ImagePromptTest {
         mediaResource = mediaResource,
     )
 
-    private fun imageHistory(id: Int = 1) = HistoryRecord(
+    private fun imageHistory(id: Int = 1, userId: String = "user-a") = HistoryRecord(
         id = id,
         botId = "bot-a",
         groupId = "group-a",
-        userId = "user-a",
+        userId = userId,
         nick = "Alice",
         messageType = MessageType.IMAGE,
         content = "[图片]",
