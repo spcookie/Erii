@@ -56,14 +56,16 @@ class MessagePipeline(
         return withContext(Dispatchers.IO) {
             var resource: ResourceRecord? = null
             val media = parsed.imageUrl
-                ?.let { MediaSource(it, parsed.imageFormat, "image") }
-                ?: parsed.audioUrl?.let { MediaSource(it, parsed.audioFormat, "audio") }
+                ?.let { MediaSource(it, parsed.imageFormat, "image", MessageType.IMAGE) }
+                ?: parsed.audioUrl?.let { MediaSource(it, parsed.audioFormat, "audio", MessageType.AUDIO) }
 
             if (media != null) {
                 val buffer = readMedia(media.url)
                 val size = buffer.size.toLong()
                 val md5 = buffer.md5().hex()
                 val format = sanitizeFormat(media.format)
+                    ?: detectMediaFormat(buffer, media.messageType)
+                    ?: "bin"
 
                 val matchingResources = transaction {
                     ResourceEntity.find {
@@ -137,16 +139,17 @@ class MessagePipeline(
         else -> error("Unsupported media source: $source")
     }
 
-    private fun sanitizeFormat(format: String?): String =
+    private fun sanitizeFormat(format: String?): String? =
         format
+            ?.trim()
             ?.lowercase()
             ?.takeIf { it.matches(SAFE_FORMAT) }
-            ?: "bin"
 
     private data class MediaSource(
         val url: String,
         val format: String?,
         val directory: String,
+        val messageType: MessageType,
     )
 
     private companion object {

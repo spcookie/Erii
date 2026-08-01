@@ -61,6 +61,32 @@ class OneBotMessagePlatformAdapterTest {
     }
 
     @Test
+    fun `audio parser uses filename format when preferred url has no extension`() = runBlocking {
+        val parsed = OneBotMessagePlatformAdapter().parseMessage(
+            event(
+                recordSegment(
+                    file = "voice.WAV",
+                    url = "https://example.com/download?token=test",
+                )
+            ),
+            "10000",
+        )
+
+        assertEquals("https://example.com/download?token=test", parsed.audioUrl)
+        assertEquals("wav", parsed.audioFormat)
+    }
+
+    @Test
+    fun `media parser keeps format null when url and filename have no supported extension`() = runBlocking {
+        val parsed = OneBotMessagePlatformAdapter().parseMessage(
+            event(recordSegment(file = "voice", url = "https://example.com/download")),
+            "10000",
+        )
+
+        assertNull(parsed.audioFormat)
+    }
+
+    @Test
     fun `mixed media keeps only the first media resource`() = runBlocking {
         val audioFirst = OneBotMessagePlatformAdapter().parseMessage(
             event(

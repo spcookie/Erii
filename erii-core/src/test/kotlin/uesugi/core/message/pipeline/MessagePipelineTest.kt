@@ -52,6 +52,45 @@ class MessagePipelineTest {
     }
 
     @Test
+    fun `unknown audio extension is detected from wav content before storage`() = runBlocking {
+        createDatabase()
+        val storage = RecordingObjectStorage()
+        val pipeline = pipeline(storage)
+        val bytes = "RIFF\u0000\u0000\u0000\u0000WAVEfmt ".encodeToByteArray()
+
+        val history = pipeline.saveHistory(
+            context(
+                audioUrl = "base64://${Base64.getEncoder().encodeToString(bytes)}",
+                audioFormat = null,
+            )
+        )
+
+        assertTrue(history.resource!!.url.endsWith(".wav"))
+        assertContentEquals(bytes, storage.singleValue())
+    }
+
+    @Test
+    fun `unknown image extension is detected from png content before storage`() = runBlocking {
+        createDatabase()
+        val storage = RecordingObjectStorage()
+        val pipeline = pipeline(storage)
+        val bytes = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00,
+        )
+
+        val history = pipeline.saveHistory(
+            imageContext(
+                imageUrl = "base64://${Base64.getEncoder().encodeToString(bytes)}",
+                imageFormat = null,
+            )
+        )
+
+        assertTrue(history.resource!!.url.endsWith(".png"))
+        assertContentEquals(bytes, storage.singleValue())
+    }
+
+    @Test
     fun `audio media reader supports local files and http urls`() = runBlocking {
         createDatabase()
         val storage = RecordingObjectStorage()
@@ -129,6 +168,20 @@ class MessagePipelineTest {
             messageType = MessageType.AUDIO,
             audioUrl = audioUrl,
             audioFormat = audioFormat,
+        ),
+    )
+
+    private fun imageContext(imageUrl: String, imageFormat: String?) = MessageContext(
+        botId = "bot-a",
+        groupId = "group-a",
+        senderId = "user-a",
+        senderNick = "Alice",
+        parsedMessage = ParsedMessage(
+            content = "[图片]",
+            isAtBot = false,
+            messageType = MessageType.IMAGE,
+            imageUrl = imageUrl,
+            imageFormat = imageFormat,
         ),
     )
 

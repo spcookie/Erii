@@ -44,7 +44,11 @@ class OneBotMessagePlatformAdapter : MessagePlatformAdapter<GroupMessageEvent> {
                             hasMedia = true
                             messageType = MessageType.IMAGE
                             imageUrl = segment.imageUrl ?: segment.imageFile
-                            imageFormat = inferMediaFormat(imageUrl, IMAGE_FORMATS)
+                            imageFormat = inferMediaFormat(
+                                supportedFormats = IMAGE_FORMATS,
+                                segment.imageUrl,
+                                segment.imageFile,
+                            )
                         }
                         append(segment.data["summary"]?.jsonPrimitive?.contentOrNull ?: "[图片]")
                     }
@@ -54,7 +58,11 @@ class OneBotMessagePlatformAdapter : MessagePlatformAdapter<GroupMessageEvent> {
                             hasMedia = true
                             messageType = MessageType.AUDIO
                             audioUrl = segment.recordUrl ?: segment.recordFile
-                            audioFormat = inferMediaFormat(audioUrl, AUDIO_FORMATS)
+                            audioFormat = inferMediaFormat(
+                                supportedFormats = AUDIO_FORMATS,
+                                segment.recordUrl,
+                                segment.recordFile,
+                            )
                         }
                         append("[音频]")
                     }
@@ -92,18 +100,21 @@ class OneBotMessagePlatformAdapter : MessagePlatformAdapter<GroupMessageEvent> {
         )
     }
 
-    private fun inferMediaFormat(source: String?, supportedFormats: Set<String>): String? {
+    private fun inferMediaFormat(
+        supportedFormats: Set<String>,
+        vararg sources: String?,
+    ): String? = sources.firstNotNullOfOrNull { source ->
         val cleanSource = source
             ?.substringBefore("?")
             ?.substringBefore("#")
             ?.removePrefix("file://")
-            ?: return null
+            ?: return@firstNotNullOfOrNull null
         if (cleanSource.startsWith("base64://")) {
-            return null
+            return@firstNotNullOfOrNull null
         }
         val extension = cleanSource.substringAfterLast(".", missingDelimiterValue = "")
             .lowercase()
-        return extension.takeIf { it in supportedFormats }
+        extension.takeIf { it in supportedFormats }
     }
 
     private companion object {
