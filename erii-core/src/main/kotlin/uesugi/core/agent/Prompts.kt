@@ -83,16 +83,14 @@ internal suspend fun buildPrompt(
                     line { text("按时间顺序排列的群聊消息如下。") }
                     line { text("格式说明：") }
                     bulleted {
-                        item { line { text("你的历史发言以工具调用形式展示，每次调用后的 [OK] 只是系统投递确认，不是群聊消息，不需要回应。") } }
-                        item { line { text("你必须始终通过调用工具来发送消息，禁止直接输出聊天内容。") } }
-                        item { line { text("一条消息说清楚就够，不要用不同措辞反复发送同一句话。") } }
-                        item { line { text("回应完毕后应输出 <end_tern> 或调用 sendSilent() 结束。") } }
+                        item { line { text("你的历史文本发言以工具调用形式展示，每次调用后的 [OK] 只是系统投递确认，不是群聊消息，不需要回应。") } }
+                        item { line { text("你的历史图片和音频以“历史媒体消息”文本标记展示；这不是工具调用示例，不要照此发送。需要重新理解其内容时，使用 image_id 调用 understandImage，或使用 audio_id 调用 transcribeAudio。") } }
                     }
                     if (!supportsVision) {
-                        line { text("图片：包含图片ID：image_id；需要理解图片内容时调用 understandImage。") }
+                        line { text("当前模型无法直接查看图片。聊天记录中的图片以 [image_id:数字] 标记；确实需要理解图片内容时，只将其中的数字 ID 传给 understandImage。") }
                     }
                     if (!supportsAudio) {
-                        line { text("音频：包含音频ID：audio_id；需要理解音频内容时调用 transcribeAudio。") }
+                        line { text("当前模型无法直接理解音频。聊天记录中的音频以 [audio_id:数字] 标记；需要理解、总结或回复音频内容时，只将其中的数字 ID 传给 transcribeAudio。") }
                     }
                 }
             }
@@ -114,7 +112,7 @@ internal suspend fun buildPrompt(
 private fun PromptBuilder.addBotHistoryMessage(history: HistoryRecord) {
     val call = buildBotToolCall(history, generateToolCallId(history))
     if (call == null) {
-        assistant(history.content.orEmpty())
+        assistant(history.botHistoryContent())
         return
     }
 
@@ -123,6 +121,16 @@ private fun PromptBuilder.addBotHistoryMessage(history: HistoryRecord) {
     }
     toolResult(tool = call.tool, output = "[OK]", id = call.id)
 }
+
+private fun HistoryRecord.botHistoryContent(): String = when (messageType) {
+    MessageType.IMAGE -> historicalMediaMarker("图片", "image_id", id)
+    MessageType.AUDIO -> historicalMediaMarker("音频", "audio_id", id)
+    else -> content.orEmpty()
+}
+
+private fun historicalMediaMarker(mediaName: String, idLabel: String, historyId: Int?): String =
+    historyId?.let { "[历史媒体消息：已发送$mediaName，$idLabel=$it]" }
+        ?: "[历史媒体消息：已发送$mediaName]"
 
 private fun PromptBuilder.addUserHistoryMessage(
     history: HistoryRecord,
@@ -179,20 +187,25 @@ private fun isMarkdown(text: String): Boolean {
 
 private fun buildBotToolCall(history: HistoryRecord, callId: String): MessagePart.Tool.Call? {
     return when (history.messageType) {
-        MessageType.TEXT, MessageType.IMAGE, MessageType.AUDIO -> {
-            val text = when (history.messageType) {
-                MessageType.IMAGE -> mediaPlaceholder("image_id", history.id, "[图片]")
-                MessageType.AUDIO -> mediaPlaceholder("audio_id", history.id, "[音频]")
-                else -> history.content ?: ""
+        MessageType.TEXT -> {
+            val text = history.content.orEmpty()
+            if (isMarkdown(text)) {
+                MessagePart.Tool.Call(
+                    id = callId,
+                    tool = "sendMarkdown",
+                    args = buildJsonObject {
+                        put("content", JsonPrimitive(text))
+                    },
+                )
+            } else {
+                MessagePart.Tool.Call(
+                    id = callId,
+                    tool = "sendText",
+                    args = buildJsonObject {
+                        put("texts", JsonArray(listOf(JsonPrimitive(text))))
+                    },
+                )
             }
-            val tool = if (isMarkdown(text)) "sendMarkdown" else "sendText"
-            MessagePart.Tool.Call(
-                id = callId,
-                tool = tool,
-                args = buildJsonObject {
-                    put("texts", JsonArray(listOf(JsonPrimitive(text))))
-                }
-            )
         }
 
         else -> null

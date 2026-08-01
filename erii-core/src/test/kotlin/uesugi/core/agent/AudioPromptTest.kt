@@ -58,6 +58,10 @@ class AudioPromptTest {
         assertEquals(0, reads)
         assertTrue(prompt.messages.any { it.textContent().contains("[音频]") })
         assertTrue(prompt.messages.any { it.textContent().contains("[audio_id:1]") })
+        assertTrue(prompt.messages.any {
+            it.textContent().contains("当前模型无法直接理解音频") &&
+                it.textContent().contains("只将其中的数字 ID 传给 transcribeAudio")
+        })
         assertFalse(prompt.messages.flatMap { it.parts }.any { it is MessagePart.Attachment })
     }
 
@@ -82,7 +86,7 @@ class AudioPromptTest {
     }
 
     @Test
-    fun `bot audio history is rendered as placeholder and never loaded`() = runBlocking {
+    fun `bot audio history uses a non-callable media marker and is never loaded`() = runBlocking {
         var reads = 0
         val prompt = buildPrompt(
             context = context(
@@ -95,14 +99,9 @@ class AudioPromptTest {
             supportsAudio = true,
         )
 
-        val call = prompt.messages
-            .flatMap { it.parts }
-            .filterIsInstance<MessagePart.Tool.Call>()
-            .single()
-
         assertEquals(0, reads)
-        assertTrue(call.args.contains("[音频]"))
-        assertTrue(call.args.contains("[audio_id:1]"))
+        assertFalse(prompt.messages.flatMap { it.parts }.any { it is MessagePart.Tool.Call })
+        assertTrue(prompt.messages.any { it.textContent().contains("[历史媒体消息：已发送音频，audio_id=1]") })
     }
 
     private fun context(
