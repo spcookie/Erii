@@ -340,6 +340,13 @@
         "url": "https://api.minimaxi.com/v1/coding_plan/search"
       }
     ],
+    "stt": [
+      {
+        "name": "volcengine-flash",
+        "url": "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash",
+        "model": "volc.bigasr.auc_turbo"
+      }
+    ],
     "vision": [
       {
         "name": "Ark",

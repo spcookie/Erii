@@ -97,6 +97,9 @@ func buildEnvVars(d *SetupData) map[string]string {
 	if d.SearchEnabled && d.SearchAPIKey != "" {
 		vars["SEARCH_API_KEY"] = d.SearchAPIKey
 	}
+	if d.STTEnabled && d.STTAPIKey != "" {
+		vars["STT_API_KEY"] = d.STTAPIKey
+	}
 	if d.VisionEnabled && d.VisionAPIKey != "" {
 		vars["VISION_API_KEY"] = d.VisionAPIKey
 	}
@@ -312,6 +315,24 @@ func modifyConfig(d *SetupData, filePath string) error {
 				}
 				if isKey(trimmed, "provider") && d.SearchProvider != "" {
 					lines[i] = replaceHoconValue(line, d.SearchProvider)
+				}
+			}
+		}
+
+		// stt
+		if d.STTEnabled {
+			if ctx.match("stt") {
+				if isKey(trimmed, "api-key") {
+					lines[i] = migrateSensitiveToEnv(line, &d.STTAPIKey, "${?STT_API_KEY}")
+				}
+				if isKey(trimmed, "url") && d.STTURL != "" {
+					lines[i] = replaceHoconValue(line, d.STTURL)
+				}
+				if isKey(trimmed, "provider") && d.STTProvider != "" {
+					lines[i] = replaceHoconValue(line, d.STTProvider)
+				}
+				if isKey(trimmed, "model") && d.STTModel != "" {
+					lines[i] = replaceHoconValue(line, d.STTModel)
 				}
 			}
 		}

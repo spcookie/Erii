@@ -386,6 +386,39 @@ func buildSearchForm(d *SetupData) *huh.Form {
 	)
 }
 
+func buildSTTForm(d *SetupData) *huh.Form {
+	if d.STTProvider == "" && len(d.ToolProviders.STT) > 0 {
+		d.STTProvider = d.ToolProviders.STT[0].Name
+	}
+	if d.STTURL == "" {
+		d.STTURL = defaultToolURL(d.ToolProviders.STT, d.STTProvider)
+	}
+	if d.STTModel == "" {
+		d.STTModel = defaultToolModel(d.ToolProviders.STT, d.STTProvider)
+	}
+	return wrapForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Provider").
+				Options(buildToolProviderOptions(d.ToolProviders.STT)...).
+				Value(&d.STTProvider),
+			huh.NewInput().
+				Title("API Key").
+				Value(&d.STTAPIKey).
+				EchoMode(huh.EchoModePassword).
+				Placeholder("Enter API key"),
+			huh.NewInput().
+				Title("URL").
+				Value(&d.STTURL).
+				Placeholder(placeholderOrValue(d.STTURL)),
+			huh.NewInput().
+				Title("Resource ID").
+				Value(&d.STTModel).
+				Placeholder(placeholderOrValue(d.STTModel)),
+		).WithShowHelp(false),
+	)
+}
+
 func buildVisionForm(d *SetupData) *huh.Form {
 	if d.VisionProvider == "" && len(d.ToolProviders.Vision) > 0 {
 		d.VisionProvider = d.ToolProviders.Vision[0].Name

@@ -137,6 +137,9 @@ func nodeSuffix(idx int, status nodeStatus, data *SetupData) string {
 		if data.SearchEnabled {
 			parts = append(parts, "search")
 		}
+		if data.STTEnabled {
+			parts = append(parts, "stt")
+		}
 		if data.VisionEnabled {
 			parts = append(parts, "vision")
 		}

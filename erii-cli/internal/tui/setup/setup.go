@@ -114,6 +114,7 @@ type DefaultsConfig struct {
 type ToolProvidersConfig struct {
 	Embedding []ToolProvider `json:"embedding"`
 	Search    []ToolProvider `json:"search"`
+	STT       []ToolProvider `json:"stt"`
 	Vision    []ToolProvider `json:"vision"`
 	Browser   []ToolProvider `json:"browser"`
 }
@@ -149,6 +150,11 @@ type SetupData struct {
 	SearchAPIKey      string
 	SearchURL         string
 	SearchProvider    string
+	STTEnabled        bool
+	STTAPIKey         string
+	STTURL            string
+	STTProvider       string
+	STTModel          string
 	VisionEnabled     bool
 	VisionAPIKey      string
 	VisionURL         string
@@ -191,6 +197,7 @@ const (
 	StepToolsMenu
 	StepToolsEmbedding
 	StepToolsSearch
+	StepToolsSTT
 	StepToolsVision
 	StepToolsBrowser
 	StepToolsProxy
@@ -538,6 +545,7 @@ type Model struct {
 
 	lastEmbeddingProvider string
 	lastSearchProvider    string
+	lastSTTProvider       string
 	lastVisionProvider    string
 	llmTabs               paginator.Model
 	capabilityPager       paginator.Model
@@ -769,7 +777,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateForm(msg, StepToolsMenu)
 	case StepToolsMenu:
 		return m.updateToolsMenu(msg)
-	case StepToolsEmbedding, StepToolsSearch, StepToolsVision, StepToolsBrowser, StepToolsProxy:
+	case StepToolsEmbedding, StepToolsSearch, StepToolsSTT, StepToolsVision, StepToolsBrowser, StepToolsProxy:
 		return m.updateForm(msg, StepToolsMenu)
 	case StepBot:
 		return m.updateForm(msg, StepGroups)
@@ -823,6 +831,8 @@ func (m Model) stepTitle() string {
 		return "Embedding Configuration"
 	case StepToolsSearch:
 		return "Search Configuration"
+	case StepToolsSTT:
+		return "Speech-to-Text Configuration"
 	case StepToolsVision:
 		return "Vision Configuration"
 	case StepToolsBrowser:
@@ -844,7 +854,7 @@ func (m Model) renderContent() string {
 	switch m.step {
 	case StepProviderSelect, StepToolsMenu:
 		return renderStepPage(m.stepTitle(), m.list.View())
-	case StepLLMConfig, StepLLMAdvancedAsk, StepLLMProviderSettings, StepLLMCapabilityDefault, StepLLMCapabilityLite, StepLLMCapabilityFlash, StepLLMCapabilityPro, StepLLMUsagePricing, StepToolsEmbedding, StepToolsSearch, StepToolsVision, StepToolsBrowser, StepToolsProxy, StepBot, StepGroups, StepCoreAuth:
+	case StepLLMConfig, StepLLMAdvancedAsk, StepLLMProviderSettings, StepLLMCapabilityDefault, StepLLMCapabilityLite, StepLLMCapabilityFlash, StepLLMCapabilityPro, StepLLMUsagePricing, StepToolsEmbedding, StepToolsSearch, StepToolsSTT, StepToolsVision, StepToolsBrowser, StepToolsProxy, StepBot, StepGroups, StepCoreAuth:
 		return renderFormStep(m.stepTitle(), m.form, m.llmAdvancedTabs())
 	case StepDone:
 		return m.renderSummary()
@@ -898,6 +908,9 @@ func (m Model) renderSummary() string {
 	if d.SearchEnabled {
 		b.WriteString(fmt.Sprintf("  Search: provider=%s\n", d.SearchProvider))
 	}
+	if d.STTEnabled {
+		b.WriteString(fmt.Sprintf("  STT: provider=%s model=%s\n", d.STTProvider, d.STTModel))
+	}
 	if d.VisionEnabled {
 		b.WriteString(fmt.Sprintf("  Vision: provider=%s\n", d.VisionProvider))
 	}
@@ -907,7 +920,7 @@ func (m Model) renderSummary() string {
 	if d.ProxyEnabled {
 		b.WriteString(fmt.Sprintf("  Proxy: http=%s socks=%s\n", d.HTTPProxy, d.SOCKSProxy))
 	}
-	if !d.EmbeddingEnabled && !d.SearchEnabled && !d.VisionEnabled && !d.BrowserEnabled && !d.ProxyEnabled {
+	if !d.EmbeddingEnabled && !d.SearchEnabled && !d.STTEnabled && !d.VisionEnabled && !d.BrowserEnabled && !d.ProxyEnabled {
 		b.WriteString(style.Muted("  (not configured)\n"))
 	}
 	b.WriteString("\n")
@@ -1092,6 +1105,8 @@ func (m *Model) setToolEnabled(step Step) {
 		m.data.EmbeddingEnabled = true
 	case StepToolsSearch:
 		m.data.SearchEnabled = true
+	case StepToolsSTT:
+		m.data.STTEnabled = true
 	case StepToolsVision:
 		m.data.VisionEnabled = true
 	case StepToolsBrowser:
@@ -1180,6 +1195,11 @@ func (m *Model) syncProviderURL() bool {
 		}
 	case StepToolsSearch:
 		return m.syncToolURL(m.data.ToolProviders.Search, &m.lastSearchProvider, &m.data.SearchProvider, &m.data.SearchURL)
+	case StepToolsSTT:
+		if m.syncToolURL(m.data.ToolProviders.STT, &m.lastSTTProvider, &m.data.STTProvider, &m.data.STTURL) {
+			m.data.STTModel = defaultToolModel(m.data.ToolProviders.STT, m.data.STTProvider)
+			return true
+		}
 	case StepToolsVision:
 		return m.syncToolURL(m.data.ToolProviders.Vision, &m.lastVisionProvider, &m.data.VisionProvider, &m.data.VisionURL)
 	}
@@ -1225,6 +1245,7 @@ func (m *Model) buildToolsList() {
 		toolItem{name: "Done →", isDone: true},
 		toolItem{name: "Embedding", desc: d.toolStatus(StepToolsEmbedding), step: StepToolsEmbedding},
 		toolItem{name: "Search", desc: d.toolStatus(StepToolsSearch), step: StepToolsSearch},
+		toolItem{name: "Speech-to-Text", desc: d.toolStatus(StepToolsSTT), step: StepToolsSTT},
 		toolItem{name: "Vision", desc: d.toolStatus(StepToolsVision), step: StepToolsVision},
 		toolItem{name: "Browser", desc: d.toolStatus(StepToolsBrowser), step: StepToolsBrowser},
 		toolItem{name: "Proxy", desc: d.toolStatus(StepToolsProxy), step: StepToolsProxy},
@@ -1247,6 +1268,10 @@ func (d *SetupData) toolStatus(step Step) string {
 		}
 	case StepToolsSearch:
 		if d.SearchEnabled && d.SearchAPIKey != "" {
+			return "configured"
+		}
+	case StepToolsSTT:
+		if d.STTEnabled && d.STTAPIKey != "" {
 			return "configured"
 		}
 	case StepToolsVision:
@@ -1310,6 +1335,9 @@ func (m *Model) rebuildCurrentStep() {
 	case StepToolsSearch:
 		m.lastSearchProvider = m.data.SearchProvider
 		m.form = buildSearchForm(m.data)
+	case StepToolsSTT:
+		m.lastSTTProvider = m.data.STTProvider
+		m.form = buildSTTForm(m.data)
 	case StepToolsVision:
 		m.lastVisionProvider = m.data.VisionProvider
 		m.form = buildVisionForm(m.data)
@@ -1377,6 +1405,11 @@ func (m *Model) nextEnabledTool() Step {
 		}
 		fallthrough
 	case StepToolsSearch:
+		if d.STTEnabled {
+			return StepToolsSTT
+		}
+		fallthrough
+	case StepToolsSTT:
 		if d.VisionEnabled {
 			return StepToolsVision
 		}

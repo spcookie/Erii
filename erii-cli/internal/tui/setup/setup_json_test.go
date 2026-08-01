@@ -58,6 +58,13 @@ func TestSetupJSONSupportsProviderPresetsAndAdvancedDefaults(t *testing.T) {
 	if sf.Defaults.LLMUsagePricing.PriceUnit == "" {
 		t.Fatal("llm usage pricing defaults missing")
 	}
+	if len(sf.ToolProviders.STT) != 1 {
+		t.Fatalf("expected one STT provider preset, got %d", len(sf.ToolProviders.STT))
+	}
+	stt := sf.ToolProviders.STT[0]
+	if stt.Name != "volcengine-flash" || stt.Model != "volc.bigasr.auc_turbo" || stt.URL == "" {
+		t.Fatalf("invalid STT provider preset: %+v", stt)
+	}
 }
 
 func TestOldSetupJSONDefaultsRemainUsable(t *testing.T) {

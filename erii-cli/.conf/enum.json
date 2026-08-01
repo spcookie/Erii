@@ -15,6 +15,10 @@
     "exa",
     "minimax"
   ],
+  "stt.provider": [
+    "none",
+    "volcengine-flash"
+  ],
   "vision.provider": [
     "none",
     "ark",

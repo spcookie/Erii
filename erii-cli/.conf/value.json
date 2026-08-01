@@ -329,11 +329,28 @@
   },
   "search.provider": {
     "type": "enum",
-    "default": "exa"
+    "default": "none"
   },
   "search.url": {
     "type": "string",
     "default": ""
+  },
+  "stt.api-key": {
+    "type": "string",
+    "nullable": true,
+    "default": ""
+  },
+  "stt.provider": {
+    "type": "enum",
+    "default": "none"
+  },
+  "stt.url": {
+    "type": "string",
+    "default": "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+  },
+  "stt.model": {
+    "type": "string",
+    "default": "volc.bigasr.auc_turbo"
   },
   "vision.api-key": {
     "type": "string",
@@ -341,7 +358,7 @@
   },
   "vision.provider": {
     "type": "enum",
-    "default": "minimax"
+    "default": "none"
   },
   "vision.url": {
     "type": "string",

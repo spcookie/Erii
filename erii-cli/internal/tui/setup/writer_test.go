@@ -30,6 +30,11 @@ func makeTestData() *SetupData {
 		SearchAPIKey:      "test-search-key",
 		SearchURL:         "https://search.test.com",
 		SearchProvider:    "exa",
+		STTEnabled:        true,
+		STTAPIKey:         "test-stt-key",
+		STTURL:            "https://stt.test.com/recognize/flash",
+		STTProvider:       "volcengine-flash",
+		STTModel:          "volc.bigasr.auc_turbo",
 		VisionEnabled:     true,
 		VisionAPIKey:      "test-vision-key",
 		VisionURL:         "https://vision.test.com",
@@ -72,6 +77,9 @@ func TestBuildEnvVars(t *testing.T) {
 	}
 	if vars["SEARCH_API_KEY"] != "test-search-key" {
 		t.Errorf("SEARCH_API_KEY = %q, want %q", vars["SEARCH_API_KEY"], "test-search-key")
+	}
+	if vars["STT_API_KEY"] != "test-stt-key" {
+		t.Errorf("STT_API_KEY = %q, want %q", vars["STT_API_KEY"], "test-stt-key")
 	}
 	if vars["VISION_API_KEY"] != "test-vision-key" {
 		t.Errorf("VISION_API_KEY = %q, want %q", vars["VISION_API_KEY"], "test-vision-key")
@@ -133,6 +141,7 @@ func TestBuildEnvVars_Disabled(t *testing.T) {
 	d := makeTestData()
 	d.EmbeddingEnabled = false
 	d.SearchEnabled = false
+	d.STTEnabled = false
 	d.VisionEnabled = false
 	d.BrowserEnabled = false
 	d.ProxyEnabled = false
@@ -144,6 +153,9 @@ func TestBuildEnvVars_Disabled(t *testing.T) {
 	}
 	if _, ok := vars["SEARCH_API_KEY"]; ok {
 		t.Error("SEARCH_API_KEY should not be set when search is disabled")
+	}
+	if _, ok := vars["STT_API_KEY"]; ok {
+		t.Error("STT_API_KEY should not be set when STT is disabled")
 	}
 	if _, ok := vars["VISION_API_KEY"]; ok {
 		t.Error("VISION_API_KEY should not be set when vision is disabled")
@@ -394,6 +406,13 @@ vision {
   provider = "minimax"
 }
 
+stt {
+  api-key = ${?STT_API_KEY}
+  url = "https://old-stt.example.com"
+  provider = "none"
+  model = ""
+}
+
 browser {
   download = false
   playwright-url = ${?PLAYWRIGHT_HOST}
@@ -429,7 +448,7 @@ onebot {
 	// Sensitive plaintext MUST NOT appear
 	for _, secret := range []string{
 		"openai-api-key", "test-embedding-key", "test-search-key",
-		"test-vision-key", "test-bot-token", "http://proxy.test.com:8080",
+		"test-stt-key", "test-vision-key", "test-bot-token", "http://proxy.test.com:8080",
 	} {
 		if strings.Contains(resultStr, secret) {
 			t.Errorf("secret %q leaked into application.conf!", secret)
@@ -447,7 +466,7 @@ onebot {
 	// Secret ${?VAR} references MUST remain
 	for _, ref := range []string{
 		"${?OPENAI_API_KEY}", "${?EMBEDDING_API_KEY}",
-		"${NAPCAT_TOKEN}", "${?HTTP_PROXY}",
+		"${?STT_API_KEY}", "${NAPCAT_TOKEN}", "${?HTTP_PROXY}",
 	} {
 		if !strings.Contains(resultStr, ref) {
 			t.Errorf("%s reference should remain in application.conf", ref)
@@ -487,6 +506,13 @@ embedding {
   model = "old-model"
 }
 
+stt {
+  api-key = ${?STT_API_KEY}
+  url = "https://old-stt.example.com"
+  provider = "none"
+  model = ""
+}
+
 onebot {
   bots {
     erii {
@@ -517,6 +543,9 @@ onebot {
 		"external-host = \"external.test.com\"",
 		"ws = \"ws://bot.test.com:3001\"",
 		"provider = \"bytedance\"",
+		"url = \"https://stt.test.com/recognize/flash\"",
+		"provider = \"volcengine-flash\"",
+		"model = \"volc.bigasr.auc_turbo\"",
 	}
 	for _, c := range checks {
 		if !strings.Contains(resultStr, c) {
