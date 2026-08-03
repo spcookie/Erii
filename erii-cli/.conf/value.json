@@ -468,6 +468,33 @@
     "type": "number",
     "default": 15
   },
+  "state-tuning.volition.daily-trigger-times": {
+    "type": "array",
+    "default": [
+      "15:00",
+      "20:00"
+    ]
+  },
+  "state-tuning.volition.daily-trigger-jitter-minutes": {
+    "type": "number",
+    "default": 30
+  },
+  "state-tuning.volition.silent-monitor-interval-minutes": {
+    "type": "number",
+    "default": 10
+  },
+  "state-tuning.volition.silent-threshold-hours": {
+    "type": "number",
+    "default": 4
+  },
+  "state-tuning.volition.silent-excluded-start-time": {
+    "type": "string",
+    "default": "22:00"
+  },
+  "state-tuning.volition.silent-excluded-end-time": {
+    "type": "string",
+    "default": "08:00"
+  },
   "state-tuning.volition.keyword-hit-max-stimulus": {
     "type": "number",
     "default": 30

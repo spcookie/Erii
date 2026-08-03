@@ -13,11 +13,11 @@ import uesugi.common.toolkit.logger
 import uesugi.core.component.usage.UsageContext
 import uesugi.core.message.history.orEmptyTruncatedHistoryContent
 import uesugi.core.state.dispatch.*
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.ExperimentalTime
 
 class VolitionJob(
     private val volitionAgent: VolitionAgent,
@@ -30,20 +30,31 @@ class VolitionJob(
         private val log = logger()
     }
 
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val started = AtomicBoolean(false)
 
     fun openTimingTriggerSignal() {
-        for (bot in BotManage.getAllBotIds()) {
-            val configKey = BotManage.getConfigKey(bot)
-            for (group in ConfigHolder.getEffectiveEnableGroups(configKey)) {
-                log.info("init volition for bot $bot in group $group")
-                ensureVolitionGaugeExists(bot, group)
-            }
+        if (!started.compareAndSet(false, true)) {
+            log.warn("Volition event processor is already initialized, skip duplicate startup")
+            return
         }
-        log.info("Volition event processor initialized")
 
-        startDailyTasks()
-        startSilentMonitor()
+        try {
+            for (bot in BotManage.getAllBotIds()) {
+                val configKey = BotManage.getConfigKey(bot)
+                for (group in ConfigHolder.getEffectiveEnableGroups(configKey)) {
+                    log.info("init volition for bot $bot in group $group")
+                    ensureVolitionGaugeExists(bot, group)
+                }
+            }
+            log.info("Volition event processor initialized")
+
+            startDailyTasks()
+            startSilentMonitor()
+        } catch (e: Exception) {
+            started.set(false)
+            throw e
+        }
     }
 
     override fun accepts(record: HistoryRecord): Boolean = record.messageType == MessageType.TEXT
@@ -72,7 +83,6 @@ class VolitionJob(
         volitionGaugeManager.getOrCreate(botId, groupId, BotManage.getBot(botId).role.emoticon)
     }
 
-    @OptIn(ExperimentalTime::class)
     private suspend fun processGroupVolition(
         botId: String,
         groupId: String,
@@ -183,81 +193,140 @@ class VolitionJob(
         return true
     }
 
-    @OptIn(ExperimentalTime::class)
     private fun startDailyTasks() {
-        scope.launch {
-            launchJitterDailyTask(
-                baseHour = 15,
-                baseMinute = 0,
+        val tuning = ConfigHolder.getStateTuning().volition
+        val jitterMinutes = tuning.dailyTriggerJitterMinutes.coerceAtLeast(0)
+        tuning.dailyTriggerTimes.forEach { configuredTime ->
+            val triggerTime = parseVolitionScheduleTime(configuredTime)
+            if (triggerTime == null) {
+                log.warn("Ignore invalid daily volition trigger time '$configuredTime', expected HH:mm")
+                return@forEach
+            }
+            scope.launchJitterDailyTask(
+                baseHour = triggerTime.hour,
+                baseMinute = triggerTime.minute,
                 minOffsetMinutes = 0,
-                maxOffsetMinutes = 30
-            ) { triggerDailySpeak() }
-
-            launchJitterDailyTask(
-                baseHour = 20,
-                baseMinute = 0,
-                minOffsetMinutes = 0,
-                maxOffsetMinutes = 30
+                maxOffsetMinutes = jitterMinutes,
             ) { triggerDailySpeak() }
         }
     }
 
     private fun triggerDailySpeak() {
         val volitionGaugeManager = GlobalContext.get().get<VolitionGaugeManager>()
-        volitionGaugeManager.getAllGauges().forEach { (key, _) ->
-            val (botId, groupId) = key.split(":")
-            val configKey = BotManage.getConfigKey(botId)
-            val effectiveGroups = ConfigHolder.getEffectiveEnableGroups(configKey)
-            val effectiveRedirect = ConfigHolder.getEffectiveMessageRedirectMap(configKey)
-            if (effectiveGroups.contains(groupId)) {
-                val groupId = effectiveRedirect.getOrDefault(groupId, groupId)
-                log.info("Decision: Group $groupId speaks regularly")
+        val targets = scheduledSpeakTargets(volitionGaugeManager)
+        selectOneBotPerGroup(targets, ScheduledSpeakTarget::targetGroupId, ScheduledSpeakTarget::botId)
+            .forEach { target ->
+                log.info("Decision: Group ${target.targetGroupId} regularly speaks through bot ${target.botId}")
                 speakV(
-                    botId = botId,
-                    groupId = groupId,
+                    botId = target.botId,
+                    groupId = target.targetGroupId,
                     interruptionMode = InterruptionMode.Routine
                 )
             }
+    }
+
+    private fun scheduledSpeakTargets(
+        volitionGaugeManager: VolitionGaugeManager
+    ): List<ScheduledSpeakTarget> = volitionGaugeManager.getAllGauges().mapNotNull { (key, gauge) ->
+        val (botId, sourceGroupId) = key.split(":", limit = 2)
+            .takeIf { it.size == 2 }
+            ?: run {
+                log.warn("Ignore invalid volition gauge key: $key")
+                return@mapNotNull null
+            }
+        try {
+            val configKey = BotManage.getConfigKey(botId)
+            if (sourceGroupId !in ConfigHolder.getEffectiveEnableGroups(configKey)) {
+                return@mapNotNull null
+            }
+            val targetGroupId = ConfigHolder.getEffectiveMessageRedirectMap(configKey)
+                .getOrDefault(sourceGroupId, sourceGroupId)
+            ScheduledSpeakTarget(botId, targetGroupId, gauge)
+        } catch (e: Exception) {
+            log.error("Failed to resolve scheduled speak target, botId=$botId, groupId=$sourceGroupId", e)
+            null
         }
     }
 
-    @OptIn(ExperimentalTime::class)
     private fun startSilentMonitor() {
         val volitionGaugeManager = GlobalContext.get().get<VolitionGaugeManager>()
+        val tuning = ConfigHolder.getStateTuning().volition
+        val monitorInterval = tuning.silentMonitorIntervalMinutes.coerceAtLeast(1).minutes
+        val silentThresholdHours = tuning.silentThresholdHours.coerceAtLeast(1)
+        val excludedStart = parseVolitionScheduleTime(tuning.silentExcludedStartTime)
+            ?: LocalTime(22, 0).also {
+                log.warn(
+                    "Invalid silent exclusion start time '${tuning.silentExcludedStartTime}', falling back to 22:00"
+                )
+            }
+        val excludedEnd = parseVolitionScheduleTime(tuning.silentExcludedEndTime)
+            ?: LocalTime(8, 0).also {
+                log.warn(
+                    "Invalid silent exclusion end time '${tuning.silentExcludedEndTime}', falling back to 08:00"
+                )
+            }
         scope.launch {
             while (isActive) {
-                delay(10.minutes)
-
-                val now = System.currentTimeMillis()
-
-                volitionGaugeManager.getAllGauges().forEach { (key, gauge) ->
-                    val (botId, groupId) = key.split(":")
-                    val configKey = BotManage.getConfigKey(botId)
-                    val effectiveGroups = ConfigHolder.getEffectiveEnableGroups(configKey)
-                    val effectiveRedirect = ConfigHolder.getEffectiveMessageRedirectMap(configKey)
-                    if (effectiveGroups.contains(groupId)) {
-                        val groupId = effectiveRedirect.getOrDefault(groupId, groupId)
-                        if (now - gauge.state.lastActiveTime > 4.hours.inWholeMilliseconds) {
-                            gauge.state.lastActiveTime = now
-
-                            val dateTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-                            val hour = dateTime.hour
-                            val inRange = hour in 8 until 22
-                            if (inRange) {
-                                log.info("Decision: No message from group $groupId within 4 hours, take the initiative to speak")
-                                speakV(
-                                    botId = botId,
-                                    groupId = groupId
-                                )
-                            }
-                        }
-                    }
+                delay(monitorInterval)
+                try {
+                    triggerSilentSpeak(
+                        volitionGaugeManager = volitionGaugeManager,
+                        silentThresholdHours = silentThresholdHours,
+                        excludedStart = excludedStart,
+                        excludedEnd = excludedEnd,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log.error("Silent volition monitor failed", e)
                 }
             }
         }
     }
 
-    @OptIn(ExperimentalTime::class)
+    private fun triggerSilentSpeak(
+        volitionGaugeManager: VolitionGaugeManager,
+        silentThresholdHours: Long,
+        excludedStart: LocalTime,
+        excludedEnd: LocalTime,
+    ) {
+        val now = System.currentTimeMillis()
+        val currentTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
+        if (isTimeInExcludedRange(currentTime, excludedStart, excludedEnd)) {
+            return
+        }
+
+        val silentTargets = scheduledSpeakTargets(volitionGaugeManager)
+            .groupBy(ScheduledSpeakTarget::targetGroupId)
+            .values
+            .flatMap { groupTargets ->
+                val lastActiveTime = groupTargets.maxOf { it.gauge.state.lastActiveTime }
+                if (now - lastActiveTime <= silentThresholdHours.hours.inWholeMilliseconds) {
+                    return@flatMap emptyList()
+                }
+
+                // A single selected bot speaks for the group. Advance every gauge together so
+                // the remaining bots do not trigger again on the next monitor tick.
+                groupTargets.forEach { it.gauge.state.lastActiveTime = now }
+                groupTargets
+            }
+
+        selectOneBotPerGroup(
+            silentTargets,
+            ScheduledSpeakTarget::targetGroupId,
+            ScheduledSpeakTarget::botId,
+        ).forEach { target ->
+            log.info(
+                "Decision: Group ${target.targetGroupId} has been silent for $silentThresholdHours hours, " +
+                        "bot ${target.botId} takes the initiative to speak"
+            )
+            speakV(
+                botId = target.botId,
+                groupId = target.targetGroupId
+            )
+        }
+    }
+
     private fun CoroutineScope.launchJitterDailyTask(
         baseHour: Int,
         baseMinute: Int,
@@ -265,34 +334,87 @@ class VolitionJob(
         maxOffsetMinutes: Int,
         task: suspend () -> Unit
     ) = launch {
+        var scheduledDate: LocalDate? = null
         while (isActive) {
             val zone = TimeZone.currentSystemDefault()
             val now = Clock.System.now()
-
             val today = now.toLocalDateTime(zone).date
+            var targetDate = scheduledDate?.takeIf { it >= today } ?: today
 
-            val baseTime = LocalDateTime(
-                date = today,
-                time = LocalTime(baseHour, baseMinute)
+            var triggerTime = dailyTriggerTime(
+                date = targetDate,
+                zone = zone,
+                baseHour = baseHour,
+                baseMinute = baseMinute,
+                minOffsetMinutes = minOffsetMinutes,
+                maxOffsetMinutes = maxOffsetMinutes,
             )
-
-            val offset = Random.nextInt(
-                minOffsetMinutes,
-                maxOffsetMinutes + 1
-            )
-
-            val triggerTime = baseTime
-                .toInstant(zone)
-                .plus(offset.minutes)
-
-            val delayMillis = triggerTime - now
-
-            if (delayMillis.isPositive()) {
-                delay(delayMillis)
-                task()
+            if (triggerTime <= now) {
+                targetDate = targetDate.plus(DatePeriod(days = 1))
+                triggerTime = dailyTriggerTime(
+                    date = targetDate,
+                    zone = zone,
+                    baseHour = baseHour,
+                    baseMinute = baseMinute,
+                    minOffsetMinutes = minOffsetMinutes,
+                    maxOffsetMinutes = maxOffsetMinutes,
+                )
             }
 
-            delay(1.minutes)
+            delay(triggerTime - now)
+            try {
+                task()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.error("Daily volition task failed at $triggerTime", e)
+            }
+            scheduledDate = targetDate.plus(DatePeriod(days = 1))
         }
     }
+
+    private fun dailyTriggerTime(
+        date: LocalDate,
+        zone: TimeZone,
+        baseHour: Int,
+        baseMinute: Int,
+        minOffsetMinutes: Int,
+        maxOffsetMinutes: Int,
+    ) = LocalDateTime(date, LocalTime(baseHour, baseMinute))
+        .toInstant(zone)
+        .plus(Random.nextInt(minOffsetMinutes, maxOffsetMinutes + 1).minutes)
 }
+
+private data class ScheduledSpeakTarget(
+    val botId: String,
+    val targetGroupId: String,
+    val gauge: VolitionGauge,
+)
+
+internal fun parseVolitionScheduleTime(value: String): LocalTime? {
+    val match = Regex("^(?:[01]\\d|2[0-3]):[0-5]\\d$").matchEntire(value.trim()) ?: return null
+    val (hour, minute) = match.value.split(":").map(String::toInt)
+    return LocalTime(hour, minute)
+}
+
+internal fun isTimeInExcludedRange(
+    current: LocalTime,
+    start: LocalTime,
+    end: LocalTime,
+): Boolean = when {
+    start == end -> false
+    start < end -> current >= start && current < end
+    else -> current >= start || current < end
+}
+
+internal fun <T> selectOneBotPerGroup(
+    candidates: Iterable<T>,
+    groupId: (T) -> String,
+    botId: (T) -> String,
+    random: Random = Random.Default,
+): List<T> = candidates
+    .groupBy(groupId)
+    .values
+    .mapNotNull { groupCandidates ->
+        groupCandidates.distinctBy(botId).randomOrNull(random)
+    }

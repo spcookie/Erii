@@ -148,6 +148,18 @@ data class FlowTuningConfig(
 data class VolitionTuningConfig(
     /** 群组未配置 desire 时使用的默认基础欲望值。 */
     val baseDesireDefault: Double = 15.0,
+    /** 每日定时主动发言的基准时间，格式为 HH:mm；空列表表示关闭定时发言。 */
+    val dailyTriggerTimes: List<String> = listOf("15:00", "20:00"),
+    /** 每日定时触发在基准时间之后的随机抖动上限，单位分钟。 */
+    val dailyTriggerJitterMinutes: Int = 30,
+    /** 静默群监控的轮询间隔，单位分钟。 */
+    val silentMonitorIntervalMinutes: Long = 10,
+    /** 群聊持续静默达到该时长后可触发主动发言，单位小时。 */
+    val silentThresholdHours: Long = 4,
+    /** 禁止静默触发的开始时间，格式为 HH:mm。 */
+    val silentExcludedStartTime: String = "22:00",
+    /** 禁止静默触发的结束时间，格式为 HH:mm，支持跨日时段。 */
+    val silentExcludedEndTime: String = "08:00",
     /** 关键词命中可提供的最大刺激值，实际值会乘以关键词强度。 */
     val keywordHitMaxStimulus: Double = 30.0,
     /** 群聊繁忙时增加的刺激值。 */

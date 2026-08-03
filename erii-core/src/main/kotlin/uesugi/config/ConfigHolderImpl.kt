@@ -415,6 +415,30 @@ class ConfigHolderImpl : ConfigProvider {
                     "state-tuning.volition.base-desire-default",
                     d.volition.baseDesireDefault
                 ),
+                dailyTriggerTimes = getStringListOrDefault(
+                    "state-tuning.volition.daily-trigger-times",
+                    d.volition.dailyTriggerTimes
+                ),
+                dailyTriggerJitterMinutes = getIntOrDefault(
+                    "state-tuning.volition.daily-trigger-jitter-minutes",
+                    d.volition.dailyTriggerJitterMinutes
+                ),
+                silentMonitorIntervalMinutes = getLongOrDefault(
+                    "state-tuning.volition.silent-monitor-interval-minutes",
+                    d.volition.silentMonitorIntervalMinutes
+                ),
+                silentThresholdHours = getLongOrDefault(
+                    "state-tuning.volition.silent-threshold-hours",
+                    d.volition.silentThresholdHours
+                ),
+                silentExcludedStartTime = getStringOrDefault(
+                    "state-tuning.volition.silent-excluded-start-time",
+                    d.volition.silentExcludedStartTime
+                ),
+                silentExcludedEndTime = getStringOrDefault(
+                    "state-tuning.volition.silent-excluded-end-time",
+                    d.volition.silentExcludedEndTime
+                ),
                 keywordHitMaxStimulus = getDoubleOrDefault(
                     "state-tuning.volition.keyword-hit-max-stimulus",
                     d.volition.keywordHitMaxStimulus
@@ -541,6 +565,12 @@ class ConfigHolderImpl : ConfigProvider {
 
     private fun getLongOrDefault(path: String, default: Long): Long =
         if (config.hasPath(path)) config.getLong(path) else default
+
+    private fun getStringOrDefault(path: String, default: String): String =
+        if (config.hasPath(path)) config.getString(path) else default
+
+    private fun getStringListOrDefault(path: String, default: List<String>): List<String> =
+        if (config.hasPath(path)) config.getStringList(path) else default
 
     override fun getString(path: String): String? =
         if (config.hasPath(path)) config.getString(path) else null
