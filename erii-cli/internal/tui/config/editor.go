@@ -353,7 +353,8 @@ func (m *LeafEditorModel) buildForm() {
 	if len(fields) > 0 {
 		m.form = huh.NewForm(huh.NewGroup(fields...)).
 			WithWidth(60).
-			WithShowHelp(false)
+			WithShowHelp(false).
+			WithTheme(style.HuhTheme())
 	}
 }
 
