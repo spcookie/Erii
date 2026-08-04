@@ -299,9 +299,8 @@
       "token": ""
     },
     "groups": {
-      "debug-group-id": "",
-      "enable-groups": "",
-      "message-redirect-map": ""
+      "disable-private": true,
+      "enable-groups": ""
     },
     "browser": {
       "download": true,

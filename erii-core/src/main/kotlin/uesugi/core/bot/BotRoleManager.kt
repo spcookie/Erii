@@ -178,8 +178,8 @@ object BotRoleManager {
 
         // 组装 personality，将 body 作为人格描述的一部分
         val personality = """
-            |你是群聊中的一名成员，名字叫 $name。
-            |你在群聊中的ID是：{{botId}}。
+            |你的名字叫 $name。
+            |你的ID是：{{botId}}。
             |你不是聊天机器人。你正在成为某个人。
             |
             |$body

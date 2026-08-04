@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import uesugi.common.ChatMessage
 import uesugi.common.ChatToolSet
+import uesugi.common.data.Channel
 import uesugi.common.toolkit.logger
 import uesugi.onebot.core.message.buildMessage
 import uesugi.onebot.core.model.MessageContent
@@ -14,6 +15,7 @@ import uesugi.onebot.sdk.client.OneBotClient
 import uesugi.onebot.sdk.client.api.canSendImage
 import uesugi.onebot.sdk.client.api.canSendMarkdown
 import uesugi.onebot.sdk.client.api.sendGroupMsg
+import uesugi.onebot.sdk.client.api.sendPrivateMsg
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.net.URL
@@ -23,10 +25,12 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class AgentChatToolSet(
     val client: OneBotClient,
-    val groupId: Long,
+    val channelId: String,
     val context: Context,
     private val rateLimiter: MessageSendRateLimiter = MessageSendRateLimiter()
 ) : ChatToolSet {
+
+    private val isPrivate: Boolean get() = Channel.isPrivate(channelId)
 
     private val log = logger()
 
@@ -39,12 +43,12 @@ class AgentChatToolSet(
     override suspend fun sendText(texts: List<String>): String {
         try {
             for (text in texts) {
-                sendGroupMessage(buildMessage { text(text) })
+                sendMessage(buildMessage { text(text) })
             }
         } catch (e: Exception) {
             log.error(
-                "LLM tool sendText failed: group={}, messageCount={}, totalChars={}",
-                groupId,
+                "LLM tool sendText failed: channel={}, messageCount={}, totalChars={}",
+                channelId,
                 texts.size,
                 texts.sumOf { it.length },
                 e
@@ -66,7 +70,7 @@ class AgentChatToolSet(
             if (memo != null) {
                 val imageBytes = convertNonGifToGif(memo.bytes)
                 val base64 = Base64.getEncoder().encodeToString(imageBytes)
-                sendGroupMessage(buildMessage {
+                sendMessage(buildMessage {
                     image("base64://$base64")
                 })
                 return "发送表情包消息成功"
@@ -75,7 +79,7 @@ class AgentChatToolSet(
                 return "未找到表情包\"$tag\"，已发送文字替代"
             }
         } catch (e: Exception) {
-            log.error("LLM tool sendMeme failed: group={}, tag={}", groupId, tag.take(64), e)
+            log.error("LLM tool sendMeme failed: channel={}, tag={}", channelId, tag.take(64), e)
             return "发送表情包消息失败，原因：" + e.message
         }
     }
@@ -123,11 +127,11 @@ class AgentChatToolSet(
         }
 
         try {
-            sendGroupMessage(buildMessage {
+            sendMessage(buildMessage {
                 image(file = url, url = url)
             })
         } catch (e: Exception) {
-            log.error("LLM tool sendImageByUrl failed: group={}, url={}", groupId, urlForLog(url), e)
+            log.error("LLM tool sendImageByUrl failed: channel={}, url={}", channelId, urlForLog(url), e)
             return "发送图片失败，原因：" + e.message
         }
 
@@ -144,7 +148,7 @@ class AgentChatToolSet(
 
             contentType.startsWith("image/")
         } catch (e: Exception) {
-            log.warn("LLM tool sendImageByUrl URL check failed: group={}, url={}", groupId, urlForLog(url), e)
+            log.warn("LLM tool sendImageByUrl URL check failed: channel={}, url={}", channelId, urlForLog(url), e)
             false
         }
     }
@@ -154,6 +158,10 @@ class AgentChatToolSet(
         userIds: List<Long>,
         text: String?
     ): String {
+        if (isPrivate) {
+            if (text == null) return "私聊中已忽略 @ 提及，且没有要发送的文本。"
+            return sendText(listOf(text)).let { "私聊中已忽略 @ 提及: $it" }
+        }
         try {
             val msg = buildMessage {
                 for (userId in userIds) {
@@ -161,11 +169,11 @@ class AgentChatToolSet(
                 }
                 text?.let { text(it) }
             }
-            sendGroupMessage(msg)
+            sendMessage(msg)
         } catch (e: Exception) {
             log.error(
-                "LLM tool sendAtAndText failed: group={}, userCount={}, textChars={}",
-                groupId,
+                "LLM tool sendAtAndText failed: channel={}, userCount={}, textChars={}",
+                channelId,
                 userIds.size,
                 text?.length ?: 0,
                 e
@@ -178,10 +186,13 @@ class AgentChatToolSet(
 
     @ChatMessage
     override suspend fun sendAtAll(): String {
+        if (isPrivate) {
+            return "私聊模式下不支持 @全体成员。"
+        }
         try {
-            sendGroupMessage(buildMessage { atAll() })
+            sendMessage(buildMessage { atAll() })
         } catch (e: Exception) {
-            log.error("LLM tool sendAtAll failed: group={}", groupId, e)
+            log.error("LLM tool sendAtAll failed: channel={}", channelId, e)
             return "发送 At 全体成员消息失败， 原因：" + e.message
         }
 
@@ -192,33 +203,33 @@ class AgentChatToolSet(
     override suspend fun sendMarkdown(content: String): String {
         if (canSendMarkdown()) {
             try {
-                sendGroupMessage(buildMessage { markdown(content) })
+                sendMessage(buildMessage { markdown(content) })
                 return "发送 Markdown 消息成功"
             } catch (e: Exception) {
                 log.error(
-                    "LLM tool sendMarkdown failed: group={}, contentChars={}",
-                    groupId,
+                    "LLM tool sendMarkdown failed: channel={}, contentChars={}",
+                    channelId,
                     content.length,
                     e
                 )
                 return "发送 Markdown 消息失败，原因：" + e.message
             }
         }
-        sendGroupMessage(buildMessage { text(content) })
+        sendMessage(buildMessage { text(content) })
         return "当前不支持 Markdown，已降级为文本发送"
     }
 
     private suspend fun canSendImage(): Boolean = try {
         client.canSendImage()
     } catch (e: Exception) {
-        log.warn("Failed to query image capability: group={}", groupId, e)
+        log.warn("Failed to query image capability: channel={}", channelId, e)
         false
     }
 
     private suspend fun canSendMarkdown(): Boolean = try {
         client.canSendMarkdown()
     } catch (e: Exception) {
-        log.warn("Failed to query Markdown capability: group={}", groupId, e)
+        log.warn("Failed to query Markdown capability: channel={}", channelId, e)
         false
     }
 
@@ -227,9 +238,15 @@ class AgentChatToolSet(
         .substringBefore('#')
         .take(300)
 
-    private suspend fun sendGroupMessage(message: MessageContent) {
+    private suspend fun sendMessage(message: MessageContent) {
         rateLimiter.awaitTurn()
-        client.sendGroupMsg(groupId, message)
+        if (isPrivate) {
+            val userId = Channel.extractUserId(channelId)
+                ?: error("Invalid private channel ID: $channelId")
+            client.sendPrivateMsg(userId, message)
+        } else {
+            client.sendGroupMsg(channelId.toLong(), message)
+        }
     }
 
 }

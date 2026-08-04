@@ -1,4 +1,4 @@
-package uesugi.common.event
+package uesugi.common.event.agent
 
 sealed interface AgentDispatchEvent {
     val botId: String

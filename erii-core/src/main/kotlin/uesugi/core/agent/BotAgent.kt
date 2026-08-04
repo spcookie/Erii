@@ -25,6 +25,15 @@ import uesugi.common.ChatMessage
 import uesugi.common.EventBus
 import uesugi.common.LLMModelChoice
 import uesugi.common.event.*
+import uesugi.common.event.agent.AgentCallCompleteEvent
+import uesugi.common.event.agent.AgentCallFallbackEvent
+import uesugi.common.event.agent.AgentCallRejectEvent
+import uesugi.common.event.agent.AgentCallStartEvent
+import uesugi.common.event.agent.AgentRunCompleteEvent
+import uesugi.common.event.agent.AgentRunStartEvent
+import uesugi.common.event.agent.AgentToolCallCompleteEvent
+import uesugi.common.event.agent.AgentToolCallStartEvent
+import uesugi.common.event.agent.ChatUrgentEvent
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.common.toolkit.logger
 import uesugi.common.toolkit.ref

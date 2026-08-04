@@ -17,8 +17,7 @@ data class GroupConfig(
  */
 data class BotGroupsOverride(
     val enableGroups: List<String>? = null,
-    val debugGroupId: String? = null,
-    val messageRedirectMap: Map<String, String>? = null
+    val disablePrivate: Boolean? = null
 )
 
 /**
@@ -340,14 +339,12 @@ interface ConfigProvider {
     fun getBrowserExternalHost(): String
 
     // ===== 群组 =====
-    fun getDebugGroupId(): String?
+    fun getDisablePrivate(): Boolean
     fun getEnableGroups(): List<String>
-    fun getMessageRedirectMap(): Map<String, String>
 
     // ===== 群组（Bot 维度有效值，含覆盖逻辑）=====
     fun getEffectiveEnableGroups(botKey: String): List<String>
-    fun getEffectiveDebugGroupId(botKey: String): String?
-    fun getEffectiveMessageRedirectMap(botKey: String): Map<String, String>
+    fun getEffectiveDisablePrivate(botKey: String): Boolean
 
     // ===== 插件配置 =====
     fun getPluginConfig(pluginClass: KClass<*>, pluginName: String): Config
@@ -436,15 +433,12 @@ object ConfigHolder {
     fun getBrowserExternalHost(): String = provider.getBrowserExternalHost()
 
     // ===== 群组 =====
-    fun getDebugGroupId(): String? = provider.getDebugGroupId()
+    fun getDisablePrivate(): Boolean = provider.getDisablePrivate()
     fun getEnableGroups(): List<String> = provider.getEnableGroups()
-    fun getMessageRedirectMap(): Map<String, String> = provider.getMessageRedirectMap()
 
     // ===== 群组（Bot 维度有效值）=====
     fun getEffectiveEnableGroups(botKey: String): List<String> = provider.getEffectiveEnableGroups(botKey)
-    fun getEffectiveDebugGroupId(botKey: String): String? = provider.getEffectiveDebugGroupId(botKey)
-    fun getEffectiveMessageRedirectMap(botKey: String): Map<String, String> =
-        provider.getEffectiveMessageRedirectMap(botKey)
+    fun getEffectiveDisablePrivate(botKey: String): Boolean = provider.getEffectiveDisablePrivate(botKey)
 
     // ===== 插件配置 =====
     fun getPluginConfig(pluginClass: KClass<*>, pluginName: String): Config =

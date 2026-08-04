@@ -1,6 +1,6 @@
 package uesugi.spi.annotation
 
-import uesugi.common.IntegrationEvent
+import uesugi.common.event.integration.IntegrationEvent
 import kotlin.reflect.KClass
 
 @Target(AnnotationTarget.FUNCTION)

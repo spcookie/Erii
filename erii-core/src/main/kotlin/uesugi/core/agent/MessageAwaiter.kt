@@ -12,7 +12,7 @@ import uesugi.common.BotManage
 import uesugi.common.EventBus
 import uesugi.common.LLMModelChoice
 import uesugi.common.data.HistoryRecord
-import uesugi.common.event.ChatUrgentEvent
+import uesugi.common.event.agent.ChatUrgentEvent
 import uesugi.common.event.InterruptionMode
 import uesugi.common.event.ProactiveSpeakEvent
 import uesugi.common.toolkit.ref

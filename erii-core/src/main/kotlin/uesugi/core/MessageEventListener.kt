@@ -1,19 +1,21 @@
 package uesugi.core
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.Channel as CoroutineChannel
 import org.koin.core.context.GlobalContext
+import uesugi.common.data.Channel
 import uesugi.common.message.MessageContext
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.common.toolkit.logger
 import uesugi.core.message.pipeline.MessagePipeline
 import uesugi.core.message.platform.OneBotMessagePlatformAdapter
-import uesugi.onebot.core.model.GroupMessageEvent
+import uesugi.onebot.core.model.MessageEvent
 import uesugi.onebot.sdk.client.OneBotClient
 import uesugi.onebot.sdk.client.event.onGroupMessage
 import uesugi.onebot.sdk.client.event.onMessageSent
+import uesugi.onebot.sdk.client.event.onPrivateMessage
 
-class GroupMessageEventListener(
+class MessageEventListener(
     private val botId: String,
     private val botConfigKey: String,
     initialRoleName: String = "",
@@ -27,20 +29,20 @@ class GroupMessageEventListener(
     }
 
     private val effectiveEnableGroups by lazy { ConfigHolder.getEffectiveEnableGroups(botConfigKey) }
-    private val effectiveRedirectMap by lazy { ConfigHolder.getEffectiveMessageRedirectMap(botConfigKey) }
+    private val effectiveDisablePrivate by lazy { ConfigHolder.getEffectiveDisablePrivate(botConfigKey) }
 
     private val pipeline by GlobalContext.get().inject<MessagePipeline>()
     private val adapter = OneBotMessagePlatformAdapter()
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val serial = mutableMapOf<String, Channel<GroupMessageEvent>>()
+    private val serial = mutableMapOf<String, CoroutineChannel<MessageEvent>>()
 
     private fun channelKey(groupId: String) = "${botId}_$groupId"
 
     fun register(client: OneBotClient) {
-        suspend fun serialHandle(event: GroupMessageEvent) {
-            serial.computeIfAbsent(channelKey(event.groupId.toString())) {
-                val channel = Channel<GroupMessageEvent>(Channel.UNLIMITED)
+        suspend fun serialHandle(event: MessageEvent) {
+            serial.computeIfAbsent(channelKey(adapter.extractRawGroupId(event))) {
+                val channel = CoroutineChannel<MessageEvent>(CoroutineChannel.UNLIMITED)
                 scope.launch {
                     for (event in channel) {
                         launch {
@@ -58,8 +60,12 @@ class GroupMessageEventListener(
         client.onGroupMessage { event ->
             serialHandle(event)
         }
+        client.onPrivateMessage { event ->
+            serialHandle(event)
+        }
         client.onMessageSent { event ->
             event.tryAsGroupMessage()?.let { serialHandle(it) }
+            event.tryAsPrivateMessage()?.let { serialHandle(it) }
         }
     }
 
@@ -68,10 +74,14 @@ class GroupMessageEventListener(
         serial.clear()
     }
 
-    private suspend fun handleEvent(event: GroupMessageEvent) {
-        val rawGroupId = adapter.extractRawGroupId(event)
-        val groupId = resolveGroupId(rawGroupId)
-        if (groupId !in effectiveEnableGroups) return
+    private suspend fun handleEvent(event: MessageEvent) {
+        val groupId = adapter.extractRawGroupId(event)
+
+        if (Channel.isPrivate(groupId)) {
+            if (effectiveDisablePrivate) return
+        } else {
+            if (groupId !in effectiveEnableGroups) return
+        }
 
         val context = MessageContext(
             botId = botId,
@@ -82,9 +92,5 @@ class GroupMessageEventListener(
         )
 
         pipeline.process(context, roleName)
-    }
-
-    private fun resolveGroupId(rawGroupId: String): String {
-        return effectiveRedirectMap.getOrDefault(rawGroupId, rawGroupId)
     }
 }

@@ -14,7 +14,7 @@ import uesugi.config.ChatBridgeConst.MOCK_BOT_ID
 import uesugi.config.ChatBridgeConst.MOCK_CONFIG_KEY
 import uesugi.config.ChatBridgeConst.MOCK_GROUP_ID
 import uesugi.config.ChatBridgeConst.MOCK_USER_ID
-import uesugi.core.GroupMessageEventListener
+import uesugi.core.MessageEventListener
 import uesugi.core.bot.BotRoleManager
 import uesugi.core.message.history.HistoryService
 import uesugi.core.message.platform.toCQEscaped
@@ -69,7 +69,7 @@ class ChatBridge(
     private lateinit var client: OneBotClient
 
     private var wsPort = 0
-    private var messageListener: GroupMessageEventListener? = null
+    private var messageListener: MessageEventListener? = null
     private val pendingResponseId = AtomicReference<String?>(null)
 
     @Volatile
@@ -154,7 +154,7 @@ class ChatBridge(
             messageListener!!.roleName = roleName
             return
         }
-        messageListener = GroupMessageEventListener(
+        messageListener = MessageEventListener(
             botId = MOCK_BOT_ID.toString(),
             botConfigKey = MOCK_CONFIG_KEY,
             initialRoleName = roleName,

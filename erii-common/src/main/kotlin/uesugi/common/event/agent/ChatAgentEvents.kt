@@ -1,7 +1,8 @@
-package uesugi.common.event
+package uesugi.common.event.agent
 
 import ai.koog.serialization.JSONElement
 import ai.koog.serialization.JSONObject
+import uesugi.common.event.ProactiveSpeakEvent
 
 
 data class AgentToolCallStartEvent(

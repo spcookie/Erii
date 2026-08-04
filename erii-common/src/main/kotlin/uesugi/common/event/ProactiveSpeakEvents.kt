@@ -1,9 +1,7 @@
 package uesugi.common.event
 
 import ai.koog.agents.core.tools.reflect.ToolSet
-import uesugi.common.BotManage
 import uesugi.common.ChatToolSet
-import uesugi.common.toolkit.ConfigHolder
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -20,8 +18,7 @@ data class ProactiveSpeakEvent(
     val feature: ProactiveSpeakFeature = PSFeature.NONE,
     val echo: String = Uuid.random().toHexString(),
 ) {
-    val groupId: String
-        get() = ConfigHolder.getEffectiveDebugGroupId(BotManage.getConfigKey(botId)) ?: _groupId
+    val groupId: String get() = _groupId
 }
 
 enum class InterruptionMode {

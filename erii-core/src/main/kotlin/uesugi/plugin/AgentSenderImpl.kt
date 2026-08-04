@@ -5,6 +5,16 @@ import com.google.auto.service.AutoService
 import kotlinx.coroutines.runBlocking
 import uesugi.common.EventBus
 import uesugi.common.event.*
+import uesugi.common.event.agent.AgentCallCompleteEvent
+import uesugi.common.event.agent.AgentCallFallbackEvent
+import uesugi.common.event.agent.AgentCallRejectEvent
+import uesugi.common.event.agent.AgentCallStartEvent
+import uesugi.common.event.agent.AgentDispatchEvent
+import uesugi.common.event.agent.AgentRunCompleteEvent
+import uesugi.common.event.agent.AgentRunStartEvent
+import uesugi.common.event.agent.AgentToolCallCompleteEvent
+import uesugi.common.event.agent.AgentToolCallEvent
+import uesugi.common.event.agent.AgentToolCallStartEvent
 import uesugi.spi.*
 
 @AutoService(AgentSender::class)

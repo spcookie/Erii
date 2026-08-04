@@ -12,7 +12,7 @@ import io.ktor.client.*
 import kotlinx.coroutines.*
 import uesugi.common.BotManage
 import uesugi.common.EventBus
-import uesugi.common.IntegrationEvent
+import uesugi.common.event.integration.IntegrationEvent
 import uesugi.common.toolkit.logger
 import uesugi.core.component.usage.UsageContext
 import uesugi.core.route.MetaToolSetRegister

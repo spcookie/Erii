@@ -97,3 +97,17 @@ fun HistoryEntity.toRecord(): HistoryRecord {
         createdAt = createdAt
     )
 }
+
+object Channel {
+    const val PRIVATE_PREFIX = "Channel_private__"
+
+    fun privateChannelId(userId: Long): String = "${PRIVATE_PREFIX}$userId"
+    fun privateChannelId(userId: String): String = "${PRIVATE_PREFIX}$userId"
+
+    fun isPrivate(groupId: String): Boolean = groupId.startsWith(PRIVATE_PREFIX)
+    fun isGroup(groupId: String): Boolean = !isPrivate(groupId)
+
+    fun extractUserId(groupId: String): Long? =
+        if (isPrivate(groupId)) groupId.removePrefix(PRIVATE_PREFIX).toLongOrNull()
+        else null
+}

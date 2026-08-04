@@ -6,10 +6,10 @@ import kotlinx.coroutines.sync.withLock
 import uesugi.LOG
 import uesugi.common.BotManage
 import uesugi.common.EventBus
-import uesugi.common.event.BotConnectedEvent
+import uesugi.common.event.integration.BotConnectedEvent
 import uesugi.common.toolkit.BotConfig
 import uesugi.common.toolkit.ConfigHolder
-import uesugi.core.GroupMessageEventListener
+import uesugi.core.MessageEventListener
 import uesugi.core.bot.OneBotConnectionManager.connectOne
 import uesugi.core.bot.OneBotConnectionManager.connections
 import uesugi.core.bot.OneBotConnectionManager.mutex
@@ -31,7 +31,7 @@ object OneBotConnectionManager {
         val configKey: String,
         val selfId: String,
         val client: OneBotClient,
-        val listener: GroupMessageEventListener,
+        val listener: MessageEventListener,
         // 连接时的配置快照,用于 refresh diff 判断变更类型
         val ws: String,
         val token: String,
@@ -83,7 +83,7 @@ object OneBotConnectionManager {
         LOG.info("Connecting robot $configKey, using role: ${role.name}")
 
         var client: OneBotClient? = null
-        var listener: GroupMessageEventListener? = null
+        var listener: MessageEventListener? = null
         var registered = false
         try {
             val onebotConfig = OneBotConfig(
@@ -114,7 +114,7 @@ object OneBotConnectionManager {
                 )
             )
 
-            listener = GroupMessageEventListener(selfId, configKey, role.name).also {
+            listener = MessageEventListener(selfId, configKey, role.name).also {
                 it.register(client)
             }
 
@@ -154,7 +154,7 @@ object OneBotConnectionManager {
     private suspend fun rollbackPartialConnect(
         configKey: String,
         client: OneBotClient?,
-        listener: GroupMessageEventListener?,
+        listener: MessageEventListener?,
         registered: Boolean,
     ) {
         connections.remove(configKey)

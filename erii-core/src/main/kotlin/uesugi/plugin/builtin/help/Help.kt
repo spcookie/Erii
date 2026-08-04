@@ -8,7 +8,6 @@ import org.pf4j.Extension
 import uesugi.common.toolkit.BrowserScraper
 import uesugi.common.toolkit.BrowserScraperHolder
 import uesugi.onebot.core.message.buildMessage
-import uesugi.onebot.sdk.client.api.sendGroupMsg
 import uesugi.plugin.PluginHelpCatalog
 import uesugi.plugin.PluginLifecycleManager
 import uesugi.plugin.builtin.Builtin
@@ -18,6 +17,7 @@ import uesugi.spi.AgentExtension
 import uesugi.spi.ArgParserHolder
 import uesugi.spi.CmdExtension
 import uesugi.spi.PluginContext
+import uesugi.spi.sendMessage
 import java.net.URLEncoder
 import java.util.Base64
 import kotlin.time.Duration.Companion.seconds
@@ -55,8 +55,7 @@ class Help : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExtensio
                     waitForNetworkIdle = true,
                 )
                 val base64 = Base64.getEncoder().encodeToString(bytes)
-                meta.roledBot.refBot.sendGroupMsg(
-                    meta.groupId.toLong(),
+                meta.sendMessage(
                     buildMessage { image("base64://$base64") },
                 )
             } ?: return@chain

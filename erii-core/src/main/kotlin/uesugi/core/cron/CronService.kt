@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import org.jobrunr.scheduling.JobScheduler
 import uesugi.common.BotManage
 import uesugi.common.EventBus
+import uesugi.common.data.Channel
 import uesugi.common.event.PSFeature
 import uesugi.common.message.CommandUtil
 import uesugi.common.toolkit.ConfigHolder
@@ -14,6 +15,7 @@ import uesugi.core.route.RouteCalledEvent
 import uesugi.core.route.RoutingAgent
 import uesugi.onebot.core.message.buildMessage
 import uesugi.onebot.sdk.client.api.sendGroupMsg
+import uesugi.onebot.sdk.client.api.sendPrivateMsg
 import uesugi.spi.Feature
 import uesugi.spi.sendAgent
 import kotlin.time.Duration.Companion.seconds
@@ -166,9 +168,14 @@ class CronService(private val jobScheduler: JobScheduler) {
                     task.targetUserId?.let { at(it.toLong()) }
                     text(task.content)
                 }
-                BotManage.getBot(task.botId)
-                    .refBot
-                    .sendGroupMsg(task.groupId.toLong(), msg)
+                val bot = BotManage.getBot(task.botId).refBot
+                if (Channel.isPrivate(task.groupId)) {
+                    val userId = Channel.extractUserId(task.groupId)
+                        ?: error("Invalid private channel ID: ${task.groupId}")
+                    bot.sendPrivateMsg(userId, msg)
+                } else {
+                    bot.sendGroupMsg(task.groupId.toLong(), msg)
+                }
             }
             CoroutineScope(Job())
         }

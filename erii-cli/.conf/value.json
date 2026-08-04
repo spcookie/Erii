@@ -30,15 +30,11 @@
     "type": "string",
     "default": ""
   },
-  "groups.debug-group-id": {
-    "type": "string",
-    "default": ""
+  "groups.disable-private": {
+    "type": "boolean",
+    "default": true
   },
   "groups.enable-groups": {
-    "type": "array",
-    "default": []
-  },
-  "groups.message-redirect-map": {
     "type": "array",
     "default": []
   },
@@ -274,17 +270,13 @@
     "type": "array",
     "default": []
   },
-  "onebot.bots.*.groups-override.debug-group-id": {
-    "type": "string",
+  "onebot.bots.*.groups-override.disable-private": {
+    "type": "boolean",
     "nullable": true
   },
   "onebot.bots.*.groups-override.enable-groups": {
     "type": "array",
     "nullable": true
-  },
-  "onebot.bots.*.groups-override.message-redirect-map": {
-    "type": "object",
-    "default": {}
   },
   "onebot.bots.*.groups.*.admins": {
     "type": "array",

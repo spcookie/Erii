@@ -6,6 +6,7 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import uesugi.common.BotManage
 import uesugi.common.EventBus
+import uesugi.common.data.Channel
 import uesugi.common.data.HistoryRecord
 import uesugi.common.data.HistoryTable
 import uesugi.common.event.route.CallRouteEvent
@@ -13,10 +14,24 @@ import uesugi.common.route.CmdRouteRule
 import uesugi.common.route.LLMRouteRule
 import uesugi.common.route.RouteRule
 import uesugi.common.toolkit.ConfigHolder
+import uesugi.onebot.core.model.MessageContent
+import uesugi.onebot.sdk.client.api.sendGroupMsg
+import uesugi.onebot.sdk.client.api.sendPrivateMsg
 import kotlin.time.Clock
 import kotlin.time.Duration
 
 fun Meta.getRefBot() = roledBot.refBot
+
+suspend fun Meta.sendMessage(content: MessageContent): Int {
+    val bot = getRefBot()
+    return if (Channel.isPrivate(groupId)) {
+        val userId = Channel.extractUserId(groupId)
+            ?: throw IllegalArgumentException("Invalid private channel groupId: $groupId")
+        bot.sendPrivateMsg(userId, content)
+    } else {
+        bot.sendGroupMsg(groupId.toLong(), content)
+    }
+}
 
 fun Meta.getAdmins() = ConfigHolder.getAdmins(BotManage.getConfigKey(botId), groupId)
 

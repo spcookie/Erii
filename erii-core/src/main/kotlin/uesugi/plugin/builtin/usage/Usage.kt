@@ -2,11 +2,12 @@ package uesugi.plugin.builtin.usage
 
 import io.ktor.server.config.*
 import org.pf4j.Extension
+import uesugi.common.data.Channel
 import uesugi.common.toolkit.BrowserScraper
 import uesugi.common.toolkit.BrowserScraperHolder
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.onebot.sdk.client.api.getGroupList
-import uesugi.onebot.sdk.client.api.sendGroupMsg
+import uesugi.onebot.sdk.client.api.getStrangerInfo
 import uesugi.onebot.core.message.buildMessage
 import uesugi.plugin.builtin.Builtin
 import uesugi.plugin.builtin.BuiltinExtension
@@ -79,6 +80,10 @@ private val password: String
     get() = SystemConfigHolder.config.property("security.password").getString()
 
 private suspend fun resolveGroupName(meta: Meta): String {
+    if (Channel.isPrivate(meta.groupId)) {
+        val userId = Channel.extractUserId(meta.groupId)!!
+        return meta.roledBot.refBot.getStrangerInfo(userId).nickname
+    }
     return runCatching {
         meta.roledBot.refBot.getGroupList()
             .find { it.groupId.toString() == meta.groupId }
@@ -99,8 +104,7 @@ private suspend fun renderUsage(meta: Meta, url: String) {
         password = password
     )
     val base64 = Base64.getEncoder().encodeToString(bytes)
-    meta.roledBot.refBot.sendGroupMsg(
-        meta.groupId.toLong(),
+    meta.sendMessage(
         buildMessage { image("base64://$base64") }
     )
 }

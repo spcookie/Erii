@@ -239,9 +239,7 @@ class VolitionJob(
             if (sourceGroupId !in ConfigHolder.getEffectiveEnableGroups(configKey)) {
                 return@mapNotNull null
             }
-            val targetGroupId = ConfigHolder.getEffectiveMessageRedirectMap(configKey)
-                .getOrDefault(sourceGroupId, sourceGroupId)
-            ScheduledSpeakTarget(botId, targetGroupId, gauge)
+            ScheduledSpeakTarget(botId, sourceGroupId, gauge)
         } catch (e: Exception) {
             log.error("Failed to resolve scheduled speak target, botId=$botId, groupId=$sourceGroupId", e)
             null

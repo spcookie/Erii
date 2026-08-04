@@ -1,4 +1,4 @@
-package uesugi.common.event
+package uesugi.common.event.agent
 
 import ai.koog.serialization.JSONObject
 

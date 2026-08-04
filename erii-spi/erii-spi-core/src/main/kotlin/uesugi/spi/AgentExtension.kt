@@ -30,7 +30,7 @@ import org.pf4j.Plugin
 import org.pf4j.PluginWrapper
 import uesugi.common.ChatToolSet
 import uesugi.common.IBotManage
-import uesugi.common.IntegrationEvent
+import uesugi.common.event.integration.IntegrationEvent
 import uesugi.common.data.HistoryRecord
 import uesugi.common.event.PSFeature
 import uesugi.common.event.ProactiveSpeakFeature

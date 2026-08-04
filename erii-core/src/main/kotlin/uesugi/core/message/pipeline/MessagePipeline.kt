@@ -159,7 +159,9 @@ class MessagePipeline(
     private fun routeCall(context: MessageContext, roleName: String) {
         val parsed = context.parsedMessage
 
-        if (parsed.isAtBot) {
+        if (CommandUtil.isCommand(parsed.content)) {
+            dispatchCommand(context, CommandUtil.parseCommand(parsed.content)!!)
+        } else if (parsed.isAtBot) {
             if (CommandUtil.isAtCommand(parsed.content)) {
                 dispatchCommand(
                     context.copy(parsedMessage = parsed.copy(content = CommandUtil.removeAtPrefix(parsed.content))),
@@ -168,8 +170,6 @@ class MessagePipeline(
             } else {
                 dispatchRoute(context, roleName)
             }
-        } else if (CommandUtil.isCommand(parsed.content)) {
-            dispatchCommand(context, CommandUtil.parseCommand(parsed.content)!!)
         }
     }
 
@@ -180,12 +180,17 @@ class MessagePipeline(
                 log.info("Robot [$roleName(${context.botId})] is @, triggering active speech")
                 val route = RoutingAgent.route(context.botId, context.groupId, content)
                 log.info("Routing results: {}", route.name)
+                val inputText = if (context.isPrivate) {
+                    "你收到一条私聊消息，来自 ${context.senderNick}(${context.senderId})，内容：${content}"
+                } else {
+                    "你被群友 ${context.senderNick}(${context.senderId}) @了，内容：${content}"
+                }
                 EventBus.postAsync(
                     RouteCalledEvent(
                         botId = context.botId,
                         groupId = context.groupId,
                         senderId = context.senderId,
-                        input = "你被群友 ${context.senderNick}(${context.senderId}) @了，内容：${content}",
+                        input = inputText,
                         hit = route
                     )
                 )

@@ -267,29 +267,17 @@ class ConfigHolderImpl : ConfigProvider {
             }
         } else null
 
-        val messageRedirectMap = if (ov.hasPath("message-redirect-map")) {
+        val disablePrivate = if (ov.hasPath("disable-private")) {
             try {
-                val raw = ov.getString("message-redirect-map")
-                if (raw.isNotBlank()) {
-                    raw.split(",").map { it.trim() }
-                        .filter { it.contains(":") }
-                        .associate { val p = it.split(":"); p[0].trim() to p[1].trim() }
-                } else emptyMap()
+                ov.getBoolean("disable-private")
             } catch (_: Exception) {
-                try {
-                    val obj = ov.getObject("message-redirect-map")
-                    obj.keys.associateWith { key -> ov.getString("message-redirect-map.$key") }
-                        .filterValues { it.isNotBlank() }
-                } catch (_: Exception) {
-                    null
-                }
+                null
             }
         } else null
 
         return BotGroupsOverride(
             enableGroups = enableGroups,
-            debugGroupId = ov.tryGetString("debug-group-id"),
-            messageRedirectMap = messageRedirectMap
+            disablePrivate = disablePrivate
         )
     }
 
@@ -297,11 +285,8 @@ class ConfigHolderImpl : ConfigProvider {
         (getOnebotBots()[botKey]?.groupsOverride?.enableGroups
             ?: getEnableGroups()) + ChatBridgeConst.MOCK_GROUP_ID.toString()
 
-    override fun getEffectiveDebugGroupId(botKey: String): String? =
-        getOnebotBots()[botKey]?.groupsOverride?.debugGroupId ?: getDebugGroupId()
-
-    override fun getEffectiveMessageRedirectMap(botKey: String): Map<String, String> =
-        getMessageRedirectMap() + (getOnebotBots()[botKey]?.groupsOverride?.messageRedirectMap ?: emptyMap())
+    override fun getEffectiveDisablePrivate(botKey: String): Boolean =
+        getOnebotBots()[botKey]?.groupsOverride?.disablePrivate ?: getDisablePrivate()
 
     override fun getAdmins(botConfigKey: String, groupId: String): List<String> {
         val bots = getOnebotBots()
@@ -587,7 +572,8 @@ class ConfigHolderImpl : ConfigProvider {
 
     override fun getBrowserExternalHost(): String = config.tryGetString("browser.external-host") ?: "hostmachine"
 
-    override fun getDebugGroupId(): String? = config.tryGetString("groups.debug-group-id")
+    override fun getDisablePrivate(): Boolean =
+        if (config.hasPath("groups.disable-private")) config.getBoolean("groups.disable-private") else true
 
     override fun getEnableGroups(): List<String> {
         return try {
@@ -602,31 +588,6 @@ class ConfigHolderImpl : ConfigProvider {
                 config.getStringList("groups.enable-groups").filter { it.isNotBlank() }
             } catch (_: Exception) {
                 emptyList()
-            }
-        }
-    }
-
-    override fun getMessageRedirectMap(): Map<String, String> {
-        return try {
-            val raw = config.getString("groups.message-redirect-map")
-            if (raw.isNotBlank()) {
-                raw.split(",").map { it.trim() }
-                    .filter { it.contains(":") }
-                    .associate {
-                        val parts = it.split(":")
-                        parts[0].trim() to parts[1].trim()
-                    }
-            } else {
-                emptyMap()
-            }
-        } catch (_: Exception) {
-            try {
-                val obj = config.getObject("groups.message-redirect-map")
-                obj.keys.associateWith { key ->
-                    config.getString("groups.message-redirect-map.$key")
-                }.filterValues { it.isNotBlank() }
-            } catch (_: Exception) {
-                emptyMap()
             }
         }
     }

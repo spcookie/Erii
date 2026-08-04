@@ -3,25 +3,49 @@ package uesugi.core.message.platform
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import uesugi.common.data.Channel
 import uesugi.common.data.MessageType
 import uesugi.common.message.MessagePlatformAdapter
 import uesugi.common.message.ParsedMessage
 import uesugi.onebot.core.message.*
 import uesugi.onebot.core.model.GroupMessageEvent
+import uesugi.onebot.core.model.MessageContent
+import uesugi.onebot.core.model.MessageEvent
+import uesugi.onebot.core.model.MessageSentEvent
+import uesugi.onebot.core.model.PrivateMessageEvent
 
-class OneBotMessagePlatformAdapter : MessagePlatformAdapter<GroupMessageEvent> {
+class OneBotMessagePlatformAdapter : MessagePlatformAdapter<MessageEvent> {
 
-    override fun extractRawGroupId(event: GroupMessageEvent): String =
-        event.groupId.toString()
+    override fun extractRawGroupId(event: MessageEvent): String = when (event) {
+        is GroupMessageEvent -> event.groupId.toString()
+        is PrivateMessageEvent -> Channel.privateChannelId(event.userId)
+        is MessageSentEvent -> throw IllegalArgumentException("MessageSentEvent must be converted before reaching adapter")
+    }
 
-    override fun extractSenderId(event: GroupMessageEvent): String =
-        event.userId.toString()
+    override fun extractSenderId(event: MessageEvent): String = when (event) {
+        is GroupMessageEvent -> event.userId.toString()
+        is PrivateMessageEvent -> event.userId.toString()
+        is MessageSentEvent -> throw IllegalArgumentException("MessageSentEvent must be converted before reaching adapter")
+    }
 
-    override fun extractSenderNick(event: GroupMessageEvent): String =
-        event.sender.card.ifBlank { event.sender.nickname }
+    override fun extractSenderNick(event: MessageEvent): String = when (event) {
+        is GroupMessageEvent -> event.sender.card.ifBlank { event.sender.nickname }
+        is PrivateMessageEvent -> event.sender.nickname
+        is MessageSentEvent -> throw IllegalArgumentException("MessageSentEvent must be converted before reaching adapter")
+    }
 
-    override suspend fun parseMessage(event: GroupMessageEvent, botId: String): ParsedMessage {
-        var isAtBot = false
+    override suspend fun parseMessage(event: MessageEvent, botId: String): ParsedMessage = when (event) {
+        is GroupMessageEvent -> parseMessageSegments(event.message, botId, isPrivate = false)
+        is PrivateMessageEvent -> parseMessageSegments(event.message, botId, isPrivate = true)
+        is MessageSentEvent -> throw IllegalArgumentException("MessageSentEvent must be converted before reaching adapter")
+    }
+
+    private suspend fun parseMessageSegments(
+        message: MessageContent,
+        botId: String,
+        isPrivate: Boolean,
+    ): ParsedMessage {
+        var isAtBot = isPrivate
         var imageUrl: String? = null
         var imageFormat: String? = null
         var audioUrl: String? = null
@@ -30,10 +54,10 @@ class OneBotMessagePlatformAdapter : MessagePlatformAdapter<GroupMessageEvent> {
         var messageType = MessageType.TEXT
 
         val content = buildString {
-            for (segment in event.message) {
+            for (segment in message) {
                 when (segment.type) {
                     "at" -> {
-                        if (!isAtBot && segment.atQq?.toString() == botId) {
+                        if (!isPrivate && !isAtBot && segment.atQq?.toString() == botId) {
                             isAtBot = true
                         }
                         append("@${segment.atQq}")

@@ -335,27 +335,22 @@ fun Routing.configureBotStatus() {
         }
 
         // 单群组状态页面
-        get("/view/{botId}/{groupId}") {
-            val botId = call.parameters["botId"]
-            val groupId = call.parameters["groupId"]
-
-            if (botId == null || groupId == null) {
+        get("/view") {
+            val params = call.request.queryParameters
+            val botId = params["botId"] ?: run {
+                call.respondRedirect("/")
+                return@get
+            }
+            val groupId = params["groupId"] ?: run {
                 call.respondRedirect("/")
                 return@get
             }
 
             val roledBot = BotManage.getBot(botId)
-            val refBot = roledBot.refBot
-            val groupList = refBot.getGroupList()
-            val groups = groupList.map { it.groupId.toString() }
-                .filter { ConfigHolder.getEffectiveEnableGroups(BotManage.getConfigKey(botId)).contains(it) }.toList()
+            val queryBotName = params["botName"]
+            val queryGroupName = params["groupName"]
 
-            if (!groups.contains(groupId)) {
-                call.respondRedirect("/")
-                return@get
-            }
-
-            val groupName = groupList.find { it.groupId.toString() == groupId }?.groupName ?: groupId
+            val groupName = queryGroupName ?: groupId
 
             val pluginStats = buildPluginStats(botId)
             val groupStatus = buildGroupStatus(
@@ -374,7 +369,7 @@ fun Routing.configureBotStatus() {
 
             val viewModel = GroupStatusViewModel(
                 botId = botId,
-                botName = roledBot.role.name,
+                botName = queryBotName ?: roledBot.role.name,
                 groupId = groupId,
                 groupName = groupName,
                 groupStatus = groupStatus,
