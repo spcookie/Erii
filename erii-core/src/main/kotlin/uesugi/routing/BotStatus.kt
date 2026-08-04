@@ -240,7 +240,7 @@ fun Routing.configureBotStatus() {
             if (botId == null) {
                 call.respond(mapOf("error" to "bot-id is null"))
             } else {
-                val groups = ConfigHolder.getEffectiveEnableGroups(BotManage.getConfigKey(botId))
+                val groups = ConfigHolder.resolveEnabledGroups(BotManage.getConfigKey(botId), botId)
                 call.respond(groups)
             }
         }

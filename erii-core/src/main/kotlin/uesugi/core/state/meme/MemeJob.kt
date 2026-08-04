@@ -246,7 +246,7 @@ class MemeJob(
 
                     for (botId in BotManage.getAllBotIds()) {
                         val configKey = BotManage.getConfigKey(botId)
-                        val groups = ConfigHolder.getEffectiveEnableGroups(configKey)
+                        val groups = ConfigHolder.resolveEnabledGroups(configKey, botId)
                         log.debug("需要提取的群组: ${groups.size} 个")
                         for (groupId in groups) {
                             UsageContext.withUsage(botId, groupId) {

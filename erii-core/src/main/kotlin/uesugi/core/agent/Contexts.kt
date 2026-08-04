@@ -452,7 +452,7 @@ internal fun buildContext(event: ProactiveSpeakEvent): Context {
             interruptionMode = event.interruptionMode,
             flow = {
                 val configKey = BotManage.getConfigKey(currentBotId)
-                val baseDesire = ConfigHolder.getOnebotBots()[configKey]?.groups?.get(groupId)?.desire ?: 15.0
+                val baseDesire = ConfigHolder.getDesire(configKey, groupId)
                 val flowGauge =
                     flowGaugeManager.getOrCreate(
                         currentBotId,
@@ -549,7 +549,7 @@ internal fun buildContext(event: ProactiveSpeakEvent): Context {
                     event.botId
                 } else {
                     botConfigs.entries
-                        .find { (_, config) -> config.groups.containsKey(groupId) }
+                        .find { (key, _) -> ConfigHolder.getGroupConfig(key, groupId) != null }
                         ?.key
                 }
 

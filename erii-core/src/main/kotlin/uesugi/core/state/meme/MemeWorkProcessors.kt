@@ -18,7 +18,7 @@ class MemeCollectProcessor(
     override fun pendingKeys(): Set<StateWorkKey> = buildSet {
         for (botId in BotManage.getAllBotIds()) {
             val configKey = BotManage.getConfigKey(botId)
-            for (groupId in ConfigHolder.getEffectiveEnableGroups(configKey)) {
+            for (groupId in ConfigHolder.resolveEnabledGroups(configKey, botId)) {
                 val cursor = service.getScanState(botId, groupId)?.lastHistoryId ?: 0
                 if (service.getRecentImageMessages(botId, groupId, cursor, 1).isNotEmpty()) {
                     add(StateWorkKey(botId, groupId, kind))
@@ -47,7 +47,7 @@ class MemeAnalyzeProcessor(
     override fun pendingKeys(): Set<StateWorkKey> = buildSet {
         for (botId in BotManage.getAllBotIds()) {
             val configKey = BotManage.getConfigKey(botId)
-            for (groupId in ConfigHolder.getEffectiveEnableGroups(configKey)) {
+            for (groupId in ConfigHolder.resolveEnabledGroups(configKey, botId)) {
                 if (service.getPendingAnalysisMemes(botId, groupId).isNotEmpty()) {
                     add(StateWorkKey(botId, groupId, kind))
                 }

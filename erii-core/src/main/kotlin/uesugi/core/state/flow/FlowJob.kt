@@ -27,7 +27,7 @@ class FlowJob(
     fun openTimingTriggerSignal() {
         for (bot in BotManage.getAllBotIds()) {
             val configKey = BotManage.getConfigKey(bot)
-            for (group in ConfigHolder.getEffectiveEnableGroups(configKey)) {
+            for (group in ConfigHolder.resolveEnabledGroups(configKey, bot)) {
                 log.info("init flow for bot $bot in group $group")
                 ensureFlowGaugeExists(bot, group)
             }
@@ -59,12 +59,10 @@ class FlowJob(
     private fun ensureFlowGaugeExists(botId: String, groupId: String) {
         val flowGaugeManager by GlobalContext.get().inject<FlowGaugeManager>()
         val configKey = BotManage.getConfigKey(botId)
-        val baseDesire = ConfigHolder.getOnebotBots()[configKey]?.groups?.get(groupId)?.desire
-            ?: ConfigHolder.getStateTuning().volition.baseDesireDefault
+        val baseDesire = ConfigHolder.getDesire(configKey, groupId)
         flowGaugeManager.getOrCreate(botId, groupId, BotManage.getBot(botId).role.emoticon, baseDesire)
     }
 
-    @OptIn(ExperimentalTime::class)
     private suspend fun processGroupFlow(
         botId: String,
         groupId: String,

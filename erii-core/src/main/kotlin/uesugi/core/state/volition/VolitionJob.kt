@@ -42,7 +42,7 @@ class VolitionJob(
         try {
             for (bot in BotManage.getAllBotIds()) {
                 val configKey = BotManage.getConfigKey(bot)
-                for (group in ConfigHolder.getEffectiveEnableGroups(configKey)) {
+                for (group in ConfigHolder.resolveEnabledGroups(configKey, bot)) {
                     log.info("init volition for bot $bot in group $group")
                     ensureVolitionGaugeExists(bot, group)
                 }

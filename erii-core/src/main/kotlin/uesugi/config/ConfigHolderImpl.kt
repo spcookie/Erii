@@ -7,6 +7,11 @@ import com.typesafe.config.ConfigValueFactory
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.server.config.*
 import kotlinx.serialization.json.*
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uesugi.common.data.Channel
+import uesugi.common.data.HistoryTable
 import uesugi.common.toolkit.*
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -292,6 +297,9 @@ class ConfigHolderImpl : ConfigProvider {
     }
 
     override fun getEffectiveEnableGroups(botKey: String): List<String> =
+        getEffectiveEnableGroupPatterns(botKey)
+
+    private fun getEffectiveEnableGroupPatterns(botKey: String): List<String> =
         (getOnebotBots()[botKey]?.groupsOverride?.enableGroups
             ?: getEnableGroups()) + ChatBridgeConst.MOCK_GROUP_ID.toString()
 
@@ -299,20 +307,55 @@ class ConfigHolderImpl : ConfigProvider {
         getOnebotBots()[botKey]?.groupsOverride?.disablePrivate ?: getDisablePrivate()
 
     override fun isGroupEnabled(botKey: String, groupId: String): Boolean {
-        val patterns = getEffectiveEnableGroups(botKey)
+        if (Channel.isPrivate(groupId)) {
+            return !getEffectiveDisablePrivate(botKey)
+        }
+        val patterns = getEffectiveEnableGroupPatterns(botKey)
         return patterns.any { StrGlob.matches(it, groupId) }
     }
 
-    override fun getAdmins(botConfigKey: String, groupId: String): List<String> {
+    override fun resolveEnabledGroups(botConfigKey: String, botId: String): List<String> {
+        val patterns = getEffectiveEnableGroupPatterns(botConfigKey)
+        val disablePrivate = getEffectiveDisablePrivate(botConfigKey)
+        return transaction {
+            HistoryTable
+                .selectAll()
+                .where { HistoryTable.botId eq botId }
+                .map { it[HistoryTable.groupId] }
+                .distinct()
+                .filter { groupId ->
+                    if (Channel.isPrivate(groupId)) !disablePrivate
+                    else patterns.any { StrGlob.matches(it, groupId) }
+                }
+        }
+    }
+
+    override fun getGroupConfig(botConfigKey: String, groupId: String): GroupConfig? {
         val bots = getOnebotBots()
-        val botConfig = bots[botConfigKey] ?: return emptyList()
-        // 1) group-level glob match against group config keys
+        val botConfig = bots[botConfigKey] ?: return null
         for ((key, groupConfig) in botConfig.groups) {
             if (StrGlob.matches(key, groupId)) {
-                return groupConfig.admins
+                return groupConfig
             }
         }
-        // 2) fallback to bot-level global admins
+        return null
+    }
+
+    override fun getDesire(botConfigKey: String, groupId: String): Double {
+        val groupConfig = getGroupConfig(botConfigKey, groupId)
+        if (groupConfig != null && groupConfig.desire > 0) {
+            return groupConfig.desire
+        }
+        return getStateTuning().volition.baseDesireDefault
+    }
+
+    override fun getAdmins(botConfigKey: String, groupId: String): List<String> {
+        val groupConfig = getGroupConfig(botConfigKey, groupId)
+        if (groupConfig != null && groupConfig.admins.isNotEmpty()) {
+            return groupConfig.admins
+        }
+        val bots = getOnebotBots()
+        val botConfig = bots[botConfigKey] ?: return emptyList()
         return botConfig.admins
     }
 
@@ -594,7 +637,7 @@ class ConfigHolderImpl : ConfigProvider {
     override fun getBrowserExternalHost(): String = config.tryGetString("browser.external-host") ?: "hostmachine"
 
     override fun getDisablePrivate(): Boolean =
-        if (config.hasPath("groups.disable-private")) config.getBoolean("groups.disable-private") else true
+        !config.hasPath("groups.disable-private") || config.getBoolean("groups.disable-private")
 
     override fun getEnableGroups(): List<String> {
         return try {

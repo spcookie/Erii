@@ -267,11 +267,8 @@ class VolitionGaugeManager {
         return gauges.getOrPut(key) {
             log.debug("创建新的VolitionGauge实例, botId=$botId, groupId=$groupId")
             val configKey = BotManage.getConfigKey(botId)
-            val onebotBots = ConfigHolder.getOnebotBots()
             val tuning = ConfigHolder.getStateTuning().volition
-            val desire = onebotBots[configKey]?.let {
-                it.groups[groupId]?.desire
-            } ?: tuning.baseDesireDefault
+            val desire = ConfigHolder.getDesire(configKey, groupId)
             VolitionGauge(mood, botId, groupId, desire, tuning)
         }
     }

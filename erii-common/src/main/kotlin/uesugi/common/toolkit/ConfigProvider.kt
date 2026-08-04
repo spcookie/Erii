@@ -327,6 +327,8 @@ interface ConfigProvider {
     fun getOnebotToken(): String
     fun getOnebotBots(): Map<String, BotConfig>
     fun getAdmins(botConfigKey: String, groupId: String): List<String>
+    fun getGroupConfig(botConfigKey: String, groupId: String): GroupConfig?
+    fun getDesire(botConfigKey: String, groupId: String): Double
 
     // ===== Resource cleanup =====
     fun getResourceCleanup(): ResourceCleanupConfig
@@ -340,13 +342,33 @@ interface ConfigProvider {
     fun getBrowserExternalHost(): String
 
     // ===== 群组 =====
+
+    /** 全局私聊开关，true 则不处理私聊消息。 */
     fun getDisablePrivate(): Boolean
+
+    /** 全局启用的群号或 glob 模式列表。 */
     fun getEnableGroups(): List<String>
 
-    // ===== 群组（Bot 维度有效值，含覆盖逻辑）=====
+    /**
+     * Bot 维度有效的 glob 模式列表：bot 级别的 [BotGroupsOverride.enableGroups] 优先，
+     * 未配置时回退到全局 [getEnableGroups]。
+     */
     fun getEffectiveEnableGroups(botKey: String): List<String>
+
+    /** Bot 维度有效的私聊开关：bot 级别覆盖 > 全局配置。 */
     fun getEffectiveDisablePrivate(botKey: String): Boolean
+
+    /**
+     * 检查 [groupId] 是否启用：私聊频道受 [getEffectiveDisablePrivate] 控制，
+     * 群聊频道使用 [StrGlob] 匹配 [getEffectiveEnableGroups] 的 glob 模式。
+     */
     fun isGroupEnabled(botKey: String, groupId: String): Boolean
+
+    /**
+     * 查询 chat_history 表获取真实群号，按 [getEffectiveEnableGroups] 的 glob 模式匹配后返回。
+     * 私聊频道（Channel_private__）仅在 [getEffectiveDisablePrivate] 为 false 时包含。
+     */
+    fun resolveEnabledGroups(botConfigKey: String, botId: String): List<String>
 
     // ===== 插件配置 =====
     fun getPluginConfig(pluginClass: KClass<*>, pluginName: String): Config
@@ -422,6 +444,10 @@ object ConfigHolder {
     fun getOnebotToken(): String = provider.getOnebotToken()
     fun getOnebotBots(): Map<String, BotConfig> = provider.getOnebotBots()
     fun getAdmins(botConfigKey: String, groupId: String): List<String> = provider.getAdmins(botConfigKey, groupId)
+    fun getGroupConfig(botConfigKey: String, groupId: String): GroupConfig? =
+        provider.getGroupConfig(botConfigKey, groupId)
+
+    fun getDesire(botConfigKey: String, groupId: String): Double = provider.getDesire(botConfigKey, groupId)
 
     // ===== Resource cleanup =====
     fun getResourceCleanup(): ResourceCleanupConfig = provider.getResourceCleanup()
@@ -435,13 +461,25 @@ object ConfigHolder {
     fun getBrowserExternalHost(): String = provider.getBrowserExternalHost()
 
     // ===== 群组 =====
+
+    /** 全局私聊开关，true 则不处理私聊消息。 */
     fun getDisablePrivate(): Boolean = provider.getDisablePrivate()
+
+    /** 全局启用的群号或 glob 模式列表。 */
     fun getEnableGroups(): List<String> = provider.getEnableGroups()
 
-    // ===== 群组（Bot 维度有效值）=====
+    /** Bot 维度有效的 glob 模式列表：bot 覆盖 > 全局配置。 */
     fun getEffectiveEnableGroups(botKey: String): List<String> = provider.getEffectiveEnableGroups(botKey)
+
+    /** Bot 维度有效的私聊开关：bot 覆盖 > 全局配置。 */
     fun getEffectiveDisablePrivate(botKey: String): Boolean = provider.getEffectiveDisablePrivate(botKey)
+
+    /** 检查 [groupId] 是否启用：私聊受 disablePrivate 控制，群聊 glob 匹配。 */
     fun isGroupEnabled(botKey: String, groupId: String): Boolean = provider.isGroupEnabled(botKey, groupId)
+
+    /** 查询 chat_history 获取真实群号，按 glob 模式匹配后返回；私聊受 disablePrivate 控制。 */
+    fun resolveEnabledGroups(botConfigKey: String, botId: String): List<String> =
+        provider.resolveEnabledGroups(botConfigKey, botId)
 
     // ===== 插件配置 =====
     fun getPluginConfig(pluginClass: KClass<*>, pluginName: String): Config =

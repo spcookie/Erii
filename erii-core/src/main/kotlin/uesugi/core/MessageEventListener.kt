@@ -3,7 +3,6 @@ package uesugi.core
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel as CoroutineChannel
 import org.koin.core.context.GlobalContext
-import uesugi.common.data.Channel
 import uesugi.common.message.MessageContext
 import uesugi.common.toolkit.ConfigHolder
 import uesugi.common.toolkit.logger
@@ -27,8 +26,6 @@ class MessageEventListener(
     companion object {
         private val log = logger()
     }
-
-    private val effectiveDisablePrivate by lazy { ConfigHolder.getEffectiveDisablePrivate(botConfigKey) }
 
     private val pipeline by GlobalContext.get().inject<MessagePipeline>()
     private val adapter = OneBotMessagePlatformAdapter()
@@ -76,11 +73,7 @@ class MessageEventListener(
     private suspend fun handleEvent(event: MessageEvent) {
         val groupId = adapter.extractRawGroupId(event)
 
-        if (Channel.isPrivate(groupId)) {
-            if (effectiveDisablePrivate) return
-        } else {
-            if (!ConfigHolder.isGroupEnabled(botConfigKey, groupId)) return
-        }
+        if (!ConfigHolder.isGroupEnabled(botConfigKey, groupId)) return
 
         val context = MessageContext(
             botId = botId,
