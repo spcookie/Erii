@@ -85,7 +85,7 @@ class CronService(private val jobScheduler: JobScheduler) {
                 wheel.pushTask(task.copy(triggerTime = nextTrigger, firedAt = System.currentTimeMillis()))
             }
 
-            if (task.groupId in ConfigHolder.getEffectiveEnableGroups(task.botId)) {
+            if (ConfigHolder.isGroupEnabled(BotManage.getConfigKey(task.botId), task.groupId)) {
                 when (task.taskType) {
                     CronTaskType.REMINDER -> sendReminderMessage(task)
                     CronTaskType.TASK_TRIGGER -> fireTaskTrigger(task)

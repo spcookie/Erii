@@ -28,7 +28,6 @@ class MessageEventListener(
         private val log = logger()
     }
 
-    private val effectiveEnableGroups by lazy { ConfigHolder.getEffectiveEnableGroups(botConfigKey) }
     private val effectiveDisablePrivate by lazy { ConfigHolder.getEffectiveDisablePrivate(botConfigKey) }
 
     private val pipeline by GlobalContext.get().inject<MessagePipeline>()
@@ -80,7 +79,7 @@ class MessageEventListener(
         if (Channel.isPrivate(groupId)) {
             if (effectiveDisablePrivate) return
         } else {
-            if (groupId !in effectiveEnableGroups) return
+            if (!ConfigHolder.isGroupEnabled(botConfigKey, groupId)) return
         }
 
         val context = MessageContext(

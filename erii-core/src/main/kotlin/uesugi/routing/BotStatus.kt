@@ -180,8 +180,7 @@ internal suspend fun buildGroupStatusResponse(
 ): GroupStatusResponse? {
     if (botId !in BotManage.getAllBotIds()) return null
 
-    val enabledGroups = ConfigHolder.getEffectiveEnableGroups(BotManage.getConfigKey(botId))
-    if (groupId !in enabledGroups) return null
+    if (!ConfigHolder.isGroupEnabled(BotManage.getConfigKey(botId), groupId)) return null
 
     val roledBot = BotManage.getBot(botId)
     val groupName = roledBot.refBot.getGroupList()
@@ -253,8 +252,9 @@ fun Routing.configureBotStatus() {
                 val roledBot = BotManage.getBot(id)
                 val refBot = roledBot.refBot
                 val groupList = refBot.getGroupList()
+                val configKey = BotManage.getConfigKey(id)
                 val groups = groupList.map { it.groupId.toString() }
-                    .filter { ConfigHolder.getEffectiveEnableGroups(BotManage.getConfigKey(id)).contains(it) }.toList()
+                    .filter { ConfigHolder.isGroupEnabled(configKey, it) }.toList()
 
                 val pluginStats = buildPluginStats()
                 val emoticon = roledBot.role.emoticon
@@ -296,10 +296,10 @@ fun Routing.configureBotStatus() {
             } else {
                 val roledBot = BotManage.getBot(botId)
                 val refBot = roledBot.refBot
-                val enabledGroups = ConfigHolder.getEffectiveEnableGroups(BotManage.getConfigKey(botId))
+                val configKey = BotManage.getConfigKey(botId)
                 val groupList = refBot.getGroupList()
                 val groups = groupList
-                    .filter { enabledGroups.contains(it.groupId.toString()) }
+                    .filter { ConfigHolder.isGroupEnabled(configKey, it.groupId.toString()) }
                     .map { GroupInfo(groupId = it.groupId.toString(), groupName = it.groupName) }
                 call.respond(groups)
             }

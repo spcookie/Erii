@@ -28,6 +28,7 @@ data class BotConfig(
     val token: String,
     val roleId: String,
     val selfId: String? = null,
+    val admins: List<String> = emptyList(),
     val groups: Map<String, GroupConfig> = emptyMap(),
     val groupsOverride: BotGroupsOverride? = null,
     val enabledPlugins: List<String>? = null,
@@ -345,6 +346,7 @@ interface ConfigProvider {
     // ===== 群组（Bot 维度有效值，含覆盖逻辑）=====
     fun getEffectiveEnableGroups(botKey: String): List<String>
     fun getEffectiveDisablePrivate(botKey: String): Boolean
+    fun isGroupEnabled(botKey: String, groupId: String): Boolean
 
     // ===== 插件配置 =====
     fun getPluginConfig(pluginClass: KClass<*>, pluginName: String): Config
@@ -439,6 +441,7 @@ object ConfigHolder {
     // ===== 群组（Bot 维度有效值）=====
     fun getEffectiveEnableGroups(botKey: String): List<String> = provider.getEffectiveEnableGroups(botKey)
     fun getEffectiveDisablePrivate(botKey: String): Boolean = provider.getEffectiveDisablePrivate(botKey)
+    fun isGroupEnabled(botKey: String, groupId: String): Boolean = provider.isGroupEnabled(botKey, groupId)
 
     // ===== 插件配置 =====
     fun getPluginConfig(pluginClass: KClass<*>, pluginName: String): Config =

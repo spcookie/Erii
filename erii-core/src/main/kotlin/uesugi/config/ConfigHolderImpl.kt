@@ -208,11 +208,21 @@ class ConfigHolderImpl : ConfigProvider {
                 } else {
                     emptyMap()
                 }
+                val admins = if (botConfig.hasPath("admins")) {
+                    try {
+                        botConfig.getStringList("admins")
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                } else {
+                    emptyList()
+                }
                 result[keyStr] = BotConfig(
                     ws = botConfig.getString("ws"),
                     token = botConfig.getString("token"),
                     roleId = botConfig.getString("role-id"),
                     selfId = botConfig.tryGetString("self-id"),
+                    admins = admins,
                     groups = groups,
                     groupsOverride = if (botConfig.hasPath("groups-override")) {
                         parseBotGroupsOverride(botConfig.getConfig("groups-override"))
@@ -288,11 +298,22 @@ class ConfigHolderImpl : ConfigProvider {
     override fun getEffectiveDisablePrivate(botKey: String): Boolean =
         getOnebotBots()[botKey]?.groupsOverride?.disablePrivate ?: getDisablePrivate()
 
+    override fun isGroupEnabled(botKey: String, groupId: String): Boolean {
+        val patterns = getEffectiveEnableGroups(botKey)
+        return patterns.any { StrGlob.matches(it, groupId) }
+    }
+
     override fun getAdmins(botConfigKey: String, groupId: String): List<String> {
         val bots = getOnebotBots()
         val botConfig = bots[botConfigKey] ?: return emptyList()
-        val groupConfig = botConfig.groups[groupId] ?: return emptyList()
-        return groupConfig.admins
+        // 1) group-level glob match against group config keys
+        for ((key, groupConfig) in botConfig.groups) {
+            if (StrGlob.matches(key, groupId)) {
+                return groupConfig.admins
+            }
+        }
+        // 2) fallback to bot-level global admins
+        return botConfig.admins
     }
 
     override fun getResourceCleanup(): ResourceCleanupConfig {

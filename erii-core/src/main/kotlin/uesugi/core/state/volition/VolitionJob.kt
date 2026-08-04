@@ -236,7 +236,7 @@ class VolitionJob(
             }
         try {
             val configKey = BotManage.getConfigKey(botId)
-            if (sourceGroupId !in ConfigHolder.getEffectiveEnableGroups(configKey)) {
+            if (!ConfigHolder.isGroupEnabled(configKey, sourceGroupId)) {
                 return@mapNotNull null
             }
             ScheduledSpeakTarget(botId, sourceGroupId, gauge)
