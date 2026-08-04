@@ -12,6 +12,7 @@ import uesugi.onebot.sdk.client.api.getStrangerInfo
 import uesugi.plugin.builtin.Builtin
 import uesugi.plugin.builtin.BuiltinExtension
 import uesugi.plugin.builtin.CommandQueue
+import uesugi.plugin.builtin.resolveGroupName
 import uesugi.server.SystemConfigHolder
 import uesugi.spi.*
 import java.net.URLEncoder
@@ -36,7 +37,7 @@ class Status : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExtens
         val password = SystemConfigHolder.config.property("security.password").getString()
 
         context.chain { meta ->
-            if (!meta.isAdmin()) return@chain
+            if (meta.isGroup() && !meta.isAdmin()) return@chain
             CommandQueue.serial("${meta.botId}:${meta.groupId}", timeout = 20.seconds) {
                 val groupName = resolveGroupName(meta)
                 val url = buildString {
@@ -61,18 +62,6 @@ class Status : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExtens
                 )
             } ?: return@chain
         }
-    }
-
-    private suspend fun resolveGroupName(meta: Meta): String {
-        if (Channel.isPrivate(meta.groupId)) {
-            val userId = Channel.extractUserId(meta.groupId)!!
-            return meta.roledBot.refBot.getStrangerInfo(userId).nickname
-        }
-        return runCatching {
-            meta.roledBot.refBot.getGroupList()
-                .find { it.groupId.toString() == meta.groupId }
-                ?.groupName
-        }.getOrNull() ?: meta.groupId
     }
 
     override val cmd: String

@@ -37,6 +37,10 @@ fun Meta.getAdmins() = ConfigHolder.getAdmins(BotManage.getConfigKey(botId), gro
 
 fun Meta.isAdmin() = senderId in getAdmins()
 
+fun Meta.isPrivate() = Channel.isPrivate(groupId)
+
+fun Meta.isGroup() = Channel.isGroup(groupId)
+
 fun Meta.callLLMRoute(
     target: String,
     botId: String? = null,

@@ -2,16 +2,14 @@ package uesugi.plugin.builtin.usage
 
 import io.ktor.server.config.*
 import org.pf4j.Extension
-import uesugi.common.data.Channel
 import uesugi.common.toolkit.BrowserScraper
 import uesugi.common.toolkit.BrowserScraperHolder
 import uesugi.common.toolkit.ConfigHolder
-import uesugi.onebot.sdk.client.api.getGroupList
-import uesugi.onebot.sdk.client.api.getStrangerInfo
 import uesugi.onebot.core.message.buildMessage
 import uesugi.plugin.builtin.Builtin
 import uesugi.plugin.builtin.BuiltinExtension
 import uesugi.plugin.builtin.CommandQueue
+import uesugi.plugin.builtin.resolveGroupName
 import uesugi.server.SystemConfigHolder
 import uesugi.spi.*
 import java.net.URLEncoder
@@ -59,6 +57,7 @@ class UsageAll : CmdExtension<Unit, ArgParserHolder.Empty, Builtin>, BuiltinExte
 
     override fun onLoad(context: PluginContext) {
         context.chain { meta ->
+            if (meta.isGroup() && !meta.isAdmin()) return@chain
             CommandQueue.serialDedup(meta.groupId) {
                 val url = "http://${externalHost}:${port}/usage"
                 renderUsage(meta, url)
@@ -78,18 +77,6 @@ private val username: String
 
 private val password: String
     get() = SystemConfigHolder.config.property("security.password").getString()
-
-private suspend fun resolveGroupName(meta: Meta): String {
-    if (Channel.isPrivate(meta.groupId)) {
-        val userId = Channel.extractUserId(meta.groupId)!!
-        return meta.roledBot.refBot.getStrangerInfo(userId).nickname
-    }
-    return runCatching {
-        meta.roledBot.refBot.getGroupList()
-            .find { it.groupId.toString() == meta.groupId }
-            ?.groupName
-    }.getOrNull() ?: meta.groupId
-}
 
 private suspend fun renderUsage(meta: Meta, url: String) {
     val browserScraper = BrowserScraperHolder.getInstance()
