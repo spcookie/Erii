@@ -248,7 +248,7 @@ step_plugins() {
                 fs.writeFileSync('${dest}/package.json', JSON.stringify(pkg, null, 2) + '\n');
             "
             cp "$postinstall_template" "$dest/postinstall.js"
-            git -C "$DIST_DIR" add "packages/erii-plugins/${plugin_id}" >/dev/null 2>&1 || true
+            git -C "$DIST_DIR" add "packages/erii-plugins/${plugin_id}"
             dim "  ${plugin_id} -> erii-plugins/${plugin_id}  $(green '[new]')"
         else
             dim "  ${plugin_id} -> erii-plugins/${plugin_id}"
