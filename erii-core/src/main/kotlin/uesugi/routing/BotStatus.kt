@@ -87,7 +87,7 @@ internal fun buildGroupStatus(
     volitionGaugeManager: VolitionGaugeManager,
     evolutionService: EvolutionService,
     memoryService: MemoryService,
-    memoService: MemeService
+    memeService: MemeService
 ): BotStatus.ByGroup {
     val behaviorProfile = emotionService.getCurrentBehaviorProfile(botId, groupId)
     val pad = emotionService.getCurrentEmotion(botId, groupId)
@@ -134,7 +134,7 @@ internal fun buildGroupStatus(
         )
     }
 
-    val allMemes = memoService.getAllMemos(botId, groupId).first
+    val allMemes = memeService.getAllMemos(botId, groupId).first
     val analyzedMemes = allMemes.filter { it.description != null }
     val memeSize = allMemes.size.toLong()
     val analyzedMemeSize = analyzedMemes.size.toLong()
@@ -175,7 +175,7 @@ internal suspend fun buildGroupStatusResponse(
     volitionGaugeManager: VolitionGaugeManager,
     evolutionService: EvolutionService,
     memoryService: MemoryService,
-    memoService: MemeService,
+    memeService: MemeService,
     historyService: HistoryService,
 ): GroupStatusResponse? {
     if (botId !in BotManage.getAllBotIds()) return null
@@ -196,7 +196,7 @@ internal suspend fun buildGroupStatusResponse(
         volitionGaugeManager = volitionGaugeManager,
         evolutionService = evolutionService,
         memoryService = memoryService,
-        memoService = memoService,
+        memeService = memeService,
     )
 
     return GroupStatusResponse(
@@ -229,7 +229,7 @@ fun Routing.configureBotStatus() {
         val volitionGaugeManager by inject<VolitionGaugeManager>()
         val evolutionService by inject<EvolutionService>()
         val memoryService by inject<MemoryService>()
-        val memoService by inject<MemeService>()
+        val memeService by inject<MemeService>()
         val historyService by inject<HistoryService>()
 
         get("/bots") {
@@ -268,70 +268,13 @@ fun Routing.configureBotStatus() {
                         volitionGaugeManager = volitionGaugeManager,
                         evolutionService = evolutionService,
                         memoryService = memoryService,
-                        memoService = memoService
+                        memeService = memeService
                     )
                 }
 
                 val botName = roledBot.role.name
                 call.respond(BotStatus(id, botName, groups, botStatusByGroups, pluginStats))
             }
-        }
-
-        // TUI JSON API: 获取所有机器人列表
-        get("/api/bots") {
-            val bots = BotManage.getAllBots().map { roledBot ->
-                BotInfo(
-                    botId = roledBot.selfId,
-                    botName = roledBot.role.name
-                )
-            }
-            call.respond(bots)
-        }
-
-        // TUI JSON API: 获取指定机器人的群组列表（带群名称）
-        get("/api/bot/{bot-id}/groups") {
-            val botId = call.request.pathVariables["bot-id"]
-            if (botId == null) {
-                call.respond(mapOf("error" to "bot-id is null"))
-            } else {
-                val roledBot = BotManage.getBot(botId)
-                val refBot = roledBot.refBot
-                val configKey = BotManage.getConfigKey(botId)
-                val groupList = refBot.getGroupList()
-                val groups = groupList
-                    .filter { ConfigHolder.isGroupEnabled(configKey, it.groupId.toString()) }
-                    .map { GroupInfo(groupId = it.groupId.toString(), groupName = it.groupName) }
-                call.respond(groups)
-            }
-        }
-
-        // TUI JSON API: 获取指定机器人和群组的状态
-        get("/api/bot/{bot-id}/group/{group-id}/status") {
-            val botId = call.request.pathVariables["bot-id"]
-            val groupId = call.request.pathVariables["group-id"]
-
-            if (botId == null || groupId == null) {
-                call.respond(mapOf("error" to "bot-id or group-id is null"))
-                return@get
-            }
-
-            val response = buildGroupStatusResponse(
-                botId = botId,
-                groupId = groupId,
-                emotionService = emotionService,
-                flowGaugeManager = flowGaugeManager,
-                volitionGaugeManager = volitionGaugeManager,
-                evolutionService = evolutionService,
-                memoryService = memoryService,
-                memoService = memoService,
-                historyService = historyService,
-            )
-            if (response == null) {
-                call.respond(mapOf("error" to "group not enabled for this bot"))
-                return@get
-            }
-
-            call.respond(response)
         }
 
         // 单群组状态页面
@@ -362,7 +305,7 @@ fun Routing.configureBotStatus() {
                 volitionGaugeManager = volitionGaugeManager,
                 evolutionService = evolutionService,
                 memoryService = memoryService,
-                memoService = memoService
+                memeService = memeService
             )
 
             val hourlyMsgCounts = historyService.getHourlyMessageCounts(botId, groupId, 12)

@@ -7,8 +7,11 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
+import uesugi.common.BotManage
+import uesugi.common.data.Channel
 import uesugi.common.data.EmotionalTendencies
 import uesugi.common.data.PAD
+import uesugi.common.toolkit.ConfigHolder
 import uesugi.core.cron.CronService
 import uesugi.core.cron.CronTaskStatus
 import uesugi.core.manage.ManageListQuery
@@ -16,6 +19,7 @@ import uesugi.core.message.history.HistoryService
 import uesugi.core.message.resource.ResourceService
 import uesugi.core.state.emotion.BehaviorProfile
 import uesugi.core.state.emotion.EmotionRepository
+import uesugi.core.state.emotion.EmotionService
 import uesugi.core.state.emotion.toRecord
 import uesugi.core.state.evolution.EvolutionService
 import uesugi.core.state.evolution.SlangWord
@@ -35,6 +39,8 @@ import uesugi.core.state.summary.SummaryService
 import uesugi.core.state.volition.VolitionGaugeManager
 import uesugi.core.state.volition.VolitionRepository
 import uesugi.core.state.volition.toRecord
+import uesugi.onebot.sdk.client.api.getGroupList
+import uesugi.onebot.sdk.client.api.getStrangerInfo
 
 @Serializable
 data class PaginatedResponse<T>(
@@ -180,12 +186,79 @@ fun Routing.configureBotStatusManager() {
         val summaryService by inject<SummaryService>()
         val historyService by inject<HistoryService>()
         val resourceService by inject<ResourceService>()
+        val emotionService by inject<EmotionService>()
         val emotionRepository by inject<EmotionRepository>()
         val flowRepository by inject<FlowRepository>()
         val flowGaugeManager by inject<FlowGaugeManager>()
         val volitionRepository by inject<VolitionRepository>()
         val volitionGaugeManager by inject<VolitionGaugeManager>()
         val cronService by inject<CronService>()
+
+        // 获取所有机器人列表
+        get("/api/bots") {
+            val bots = BotManage.getAllBots().map { roledBot ->
+                BotInfo(
+                    botId = roledBot.selfId,
+                    botName = roledBot.role.name
+                )
+            }
+            call.respond(bots)
+        }
+
+        // 获取指定机器人的群组列表（带群名称）
+        get("/api/bot/{bot-id}/groups") {
+            val botId = call.request.pathVariables["bot-id"]
+            if (botId == null) {
+                call.respond(mapOf("error" to "bot-id is null"))
+            } else {
+                val roledBot = BotManage.getBot(botId)
+                val refBot = roledBot.refBot
+                val groups = ConfigHolder.resolveEnabledGroups(BotManage.getConfigKey(botId), botId)
+                    .map { groupId ->
+                        val groupName = if (Channel.isPrivate(groupId)) {
+                            val userId = Channel.extractUserId(groupId)!!
+                            refBot.getStrangerInfo(userId).nickname
+                        } else {
+                            runCatching {
+                                refBot.getGroupList()
+                                    .find { it.groupId.toString() == groupId }
+                                    ?.groupName
+                            }.getOrNull() ?: groupId
+                        }
+                        GroupInfo(groupId, groupName)
+                    }
+                call.respond(groups)
+            }
+        }
+
+        // 获取指定机器人和群组的状态
+        get("/api/bot/{bot-id}/group/{group-id}/status") {
+            val botId = call.request.pathVariables["bot-id"]
+            val groupId = call.request.pathVariables["group-id"]
+
+            if (botId == null || groupId == null) {
+                call.respond(mapOf("error" to "bot-id or group-id is null"))
+                return@get
+            }
+
+            val response = buildGroupStatusResponse(
+                botId = botId,
+                groupId = groupId,
+                emotionService = emotionService,
+                flowGaugeManager = flowGaugeManager,
+                volitionGaugeManager = volitionGaugeManager,
+                evolutionService = evolutionService,
+                memoryService = memoryService,
+                memeService = memeService,
+                historyService = historyService,
+            )
+            if (response == null) {
+                call.respond(mapOf("error" to "group not enabled for this bot"))
+                return@get
+            }
+
+            call.respond(response)
+        }
 
         get("/api/bot/{bot-id}/group/{group-id}/facts") {
             val listQuery = call.manageListQuery()

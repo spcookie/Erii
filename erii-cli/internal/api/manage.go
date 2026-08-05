@@ -215,6 +215,18 @@ func (c *Client) DeleteCronTask(botID, groupID, taskID string) error {
 	return err
 }
 
+func (c *Client) GetGroupStatus(botID, groupID string) (*GroupStatus, error) {
+	data, err := c.doRequest("GET", fmt.Sprintf("/api/bot/%s/group/%s/status", botID, groupID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var status GroupStatus
+	if err := json.Unmarshal(data, &status); err != nil {
+		return nil, err
+	}
+	return &status, nil
+}
+
 func (c *Client) GetUsage(botID, groupID string) (*TokenUsageSummary, error) {
 	path := "/api/usage"
 	if botID != "" || groupID != "" {

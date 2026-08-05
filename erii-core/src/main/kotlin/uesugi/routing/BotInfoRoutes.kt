@@ -47,7 +47,7 @@ fun Routing.configureBotInfoRoutes() {
                 volitionGaugeManager = volitionGaugeManager,
                 evolutionService = evolutionService,
                 memoryService = memoryService,
-                memoService = memeService,
+                memeService = memeService,
                 historyService = historyService,
             )
             if (status == null) {
