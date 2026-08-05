@@ -7,8 +7,8 @@ import uesugi.common.data.HistoryRecord
 import uesugi.common.data.MessageType
 import uesugi.common.data.ResourceRecord
 import uesugi.config.ChatBridgeConst.MOCK_BOT_ID
-import uesugi.config.ChatBridgeConst.MOCK_GROUP_ID
-import uesugi.config.ChatBridgeConst.MOCK_USER_ID
+import uesugi.config.ChatBridgeConst.MOCK_CHAT_USER_ID
+import uesugi.config.ChatBridgeConst.MOCK_PRIVATE_CHANNEL_ID
 import uesugi.core.message.history.HistoryService
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.mock.MockBot
@@ -25,10 +25,8 @@ class ChatBridgeHistoryTest {
         )
         mockBot.start()
         try {
-            mockBot.addGroup(MOCK_GROUP_ID, "CLI Chat")
-            mockBot.addUser(MOCK_USER_ID, "You")
-            mockBot.addGroupMember(MOCK_GROUP_ID, MOCK_BOT_ID, "Erii")
-            mockBot.addGroupMember(MOCK_GROUP_ID, MOCK_USER_ID, "You")
+            mockBot.addUser(MOCK_CHAT_USER_ID, "You")
+            mockBot.addFriend(MOCK_CHAT_USER_ID, "You")
 
             val bridge = ChatBridge(HistoryService())
             ChatBridge::class.java.getDeclaredField("mockBot").apply {
@@ -92,8 +90,8 @@ class ChatBridgeHistoryTest {
 
     private fun history(
         botId: String = MOCK_BOT_ID.toString(),
-        groupId: String = MOCK_GROUP_ID.toString(),
-        userId: String = MOCK_USER_ID.toString(),
+        groupId: String = MOCK_PRIVATE_CHANNEL_ID,
+        userId: String = MOCK_CHAT_USER_ID.toString(),
         content: String = "[图片]",
         messageType: MessageType = MessageType.TEXT,
         resource: ResourceRecord? = null,
@@ -112,7 +110,7 @@ class ChatBridgeHistoryTest {
     private fun resource() = ResourceRecord(
         id = 7,
         botId = MOCK_BOT_ID.toString(),
-        groupId = MOCK_GROUP_ID.toString(),
+        groupId = MOCK_PRIVATE_CHANNEL_ID,
         url = "./image/mock/example.png",
         fileName = "example.png",
         size = 128,

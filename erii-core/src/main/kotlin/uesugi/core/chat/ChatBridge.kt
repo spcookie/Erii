@@ -2,6 +2,7 @@ package uesugi.core.chat
 
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -11,9 +12,9 @@ import uesugi.common.data.MessageType
 import uesugi.common.data.ResourceRecord
 import uesugi.common.toolkit.logger
 import uesugi.config.ChatBridgeConst.MOCK_BOT_ID
+import uesugi.config.ChatBridgeConst.MOCK_CHAT_USER_ID
 import uesugi.config.ChatBridgeConst.MOCK_CONFIG_KEY
-import uesugi.config.ChatBridgeConst.MOCK_GROUP_ID
-import uesugi.config.ChatBridgeConst.MOCK_USER_ID
+import uesugi.config.ChatBridgeConst.MOCK_PRIVATE_CHANNEL_ID
 import uesugi.core.MessageEventListener
 import uesugi.core.bot.BotRoleManager
 import uesugi.core.message.history.HistoryService
@@ -21,13 +22,14 @@ import uesugi.core.message.platform.toCQEscaped
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.message.buildMessage
 import uesugi.onebot.core.message.text
-import uesugi.onebot.core.model.GroupMessageEvent
 import uesugi.onebot.core.model.MessageContent
+import uesugi.onebot.core.model.PrivateMessageEvent
 import uesugi.onebot.mock.MockBot
 import uesugi.onebot.mock.storage.InMemoryStorage
 import uesugi.onebot.sdk.client.OneBotClient
 import java.net.ServerSocket
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.time.Clock
 
 @Serializable
 data class ChatHistoryEntry(
@@ -82,10 +84,10 @@ class ChatBridge(
 
     fun getHistory(beforeId: Long?, limit: Int = HISTORY_LIMIT): HistoryResult {
         val botId = MOCK_BOT_ID.toString()
-        val groupId = MOCK_GROUP_ID.toString()
+        val channelId = MOCK_PRIVATE_CHANNEL_ID
         val (records, hasMore) = historyService.getHistoryByGroupCursor(
             botId = botId,
-            groupId = groupId,
+            groupId = channelId,
             beforeId = beforeId?.toInt(),
             limit = limit
         )
@@ -111,16 +113,25 @@ class ChatBridge(
         )
         mockBot = MockBot(mockConfig, InMemoryStorage(selfId = MOCK_BOT_ID))
 
-        mockBot.addGroup(MOCK_GROUP_ID, "CLI Chat")
-        mockBot.addUser(MOCK_USER_ID, "You")
-        mockBot.addGroupMember(MOCK_GROUP_ID, MOCK_BOT_ID, "Erii")
-        mockBot.addGroupMember(MOCK_GROUP_ID, MOCK_USER_ID, "You")
+        mockBot.addUser(MOCK_CHAT_USER_ID, "You")
+        mockBot.addFriend(MOCK_CHAT_USER_ID, "You")
 
-        mockBot.onBotSendGroupMsg = { event ->
+        mockBot.onBotSendPrivateMsg = { event ->
             val text = extractResponse(event)
             if (text.isNotBlank()) {
                 val requestId = pendingResponseId.getAndSet(null)?.takeIf { it.isNotBlank() }
                 wsResponseCallback?.invoke(requestId, text)
+                historyService.saveHistory(
+                    HistoryRecord(
+                        botId = MOCK_BOT_ID.toString(),
+                        groupId = MOCK_PRIVATE_CHANNEL_ID,
+                        userId = MOCK_BOT_ID.toString(),
+                        nick = messageListener?.roleName ?: "Erii",
+                        messageType = MessageType.TEXT,
+                        content = text,
+                        createdAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+                    )
+                )
             }
         }
 
@@ -144,7 +155,6 @@ class ChatBridge(
         val role = BotRoleManager.getRole(roleId)
             ?: throw IllegalArgumentException("Role not found: $roleId")
         BotManage.refreshBotRole(MOCK_CONFIG_KEY, role)
-        mockBot.addGroupMember(MOCK_GROUP_ID, MOCK_BOT_ID, role.name)
         registerListener(role.name)
         log.info("ChatBridge: role set to ${role.id} (${role.name})")
     }
@@ -167,13 +177,10 @@ class ChatBridge(
         val responseId = requestId.orEmpty()
         pendingResponseId.set(responseId)
         val message: MessageContent = buildMessage {
-            if (!text.startsWith("/")) {
-                at(MOCK_BOT_ID)
-            }
             text(text)
         }
         try {
-            mockBot.simulateGroupMessage(MOCK_GROUP_ID, MOCK_USER_ID, message)
+            mockBot.simulatePrivateMessage(MOCK_CHAT_USER_ID, message)
         } catch (e: Exception) {
             pendingResponseId.compareAndSet(responseId, null)
             throw e
@@ -193,7 +200,9 @@ class ChatBridge(
 
     fun isReady(): Boolean = ::mockBot.isInitialized && ::client.isInitialized
 
-    private fun extractResponse(event: GroupMessageEvent): String {
+    fun isRoleSelected(): Boolean = messageListener != null
+
+    private fun extractResponse(event: PrivateMessageEvent): String {
         if (event.rawMessage.isNotBlank()) return event.rawMessage
         val sb = StringBuilder()
         for (segment in event.message) {
@@ -213,7 +222,7 @@ class ChatBridge(
 
 internal fun HistoryRecord.toChatHistoryEntry(): ChatHistoryEntry {
     val sender = when (userId) {
-        MOCK_USER_ID.toString() -> "user"
+        MOCK_CHAT_USER_ID.toString() -> "user"
         else -> "bot"
     }
     val timestamp = createdAt.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
@@ -230,9 +239,9 @@ internal fun HistoryRecord.toChatHistoryEntry(): ChatHistoryEntry {
 internal fun HistoryRecord.chatImageResourceOrNull(): ResourceRecord? =
     takeIf {
         botId == MOCK_BOT_ID.toString() &&
-                groupId == MOCK_GROUP_ID.toString()
+                groupId == MOCK_PRIVATE_CHANNEL_ID
     }?.resource?.takeIf {
-        it.botId == MOCK_BOT_ID.toString() && it.groupId == MOCK_GROUP_ID.toString()
+        it.botId == MOCK_BOT_ID.toString() && it.groupId == MOCK_PRIVATE_CHANNEL_ID
     }
 
 internal fun String.removeMockBotMention(): String {

@@ -28,7 +28,8 @@ data class ChatSendResponse(
 @Serializable
 data class ChatHealthResponse(
     val status: String,
-    val mockBotReady: Boolean
+    val mockBotReady: Boolean,
+    val roleSelected: Boolean
 )
 
 @Serializable
@@ -135,7 +136,8 @@ fun Routing.configureChatRoutes() {
             call.respond(
                 ChatHealthResponse(
                     status = "ok",
-                    mockBotReady = chatBridge.isReady()
+                    mockBotReady = chatBridge.isReady(),
+                    roleSelected = chatBridge.isRoleSelected()
                 )
             )
         }
