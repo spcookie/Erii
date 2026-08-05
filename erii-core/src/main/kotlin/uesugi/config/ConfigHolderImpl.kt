@@ -7,7 +7,7 @@ import com.typesafe.config.ConfigValueFactory
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.server.config.*
 import kotlinx.serialization.json.*
-import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uesugi.common.data.Channel
@@ -301,7 +301,7 @@ class ConfigHolderImpl : ConfigProvider {
 
     private fun getEffectiveEnableGroupPatterns(botKey: String): List<String> =
         (getOnebotBots()[botKey]?.groupsOverride?.enableGroups
-            ?: getEnableGroups()) + ChatBridgeConst.MOCK_GROUP_ID.toString()
+            ?: getEnableGroups()) + ChatBridgeConst.MOCK_PRIVATE_CHANNEL_ID
 
     override fun getEffectiveDisablePrivate(botKey: String): Boolean =
         getOnebotBots()[botKey]?.groupsOverride?.disablePrivate ?: getDisablePrivate()
