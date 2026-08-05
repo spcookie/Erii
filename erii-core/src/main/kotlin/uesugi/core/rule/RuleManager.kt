@@ -1,5 +1,6 @@
 package uesugi.core.rule
 
+import uesugi.common.toolkit.StrGlob
 import java.io.File
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -34,7 +35,7 @@ object RuleManager {
      * 包括：
      * - 所有 global=true 的规则
      * - botId 匹配且 groupId 为 null 的规则（bot 级别规则）
-     * - botId + groupId 都匹配的规则（群组级别规则）
+     * - botId 匹配且 groupId 通过 strGlob 匹配的规则（群组级别规则）
      */
     fun getRulesFor(botId: String, groupId: String): List<Rule> {
         ensureInitialized()
@@ -42,12 +43,9 @@ object RuleManager {
             cachedRules.filter { rule ->
                 val meta = rule.meta
                 when {
-                    // 全局规则
                     meta.global -> true
-                    // Bot 级别规则（botId 匹配，无 groupId 限制）
                     meta.botId == botId && meta.groupId == null -> true
-                    // 群组级别规则（botId 和 groupId 都匹配）
-                    meta.botId == botId && meta.groupId == groupId -> true
+                    meta.botId == botId && meta.groupId != null && StrGlob.matches(meta.groupId, groupId) -> true
                     else -> false
                 }
             }
@@ -56,13 +54,13 @@ object RuleManager {
 
     /**
      * 获取仅属于特定 bot+group 的规则
-     * Frontmatter 中 botId 和 groupId 完全匹配，供 ToolSet 使用
+     * botId 精确匹配，groupId 使用 strGlob 通配符匹配，供 ToolSet 使用
      */
     fun getRulesForBotGroup(botId: String, groupId: String): List<Rule> {
         ensureInitialized()
         return lock.read {
             cachedRules.filter { rule ->
-                rule.meta.botId == botId && rule.meta.groupId == groupId
+                rule.meta.botId == botId && rule.meta.groupId != null && StrGlob.matches(rule.meta.groupId, groupId)
             }
         }
     }
@@ -106,7 +104,7 @@ object RuleManager {
             cachedRules.find { rule ->
                 rule.fileName == targetFileName &&
                         rule.meta.botId == botId &&
-                        rule.meta.groupId == groupId &&
+                        rule.meta.groupId != null && StrGlob.matches(rule.meta.groupId, groupId) &&
                         !rule.filePath.startsWith("classpath:")
             }
         } ?: return false
