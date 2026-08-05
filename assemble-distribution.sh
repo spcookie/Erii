@@ -140,7 +140,7 @@ step_core() {
 
     # --- build ---
     dim "  Building :erii-core:installDist ..."
-    "$GRADLEW" :erii-core:installDist >/dev/null 2>&1
+    "$GRADLEW" :erii-core:installDist
 
     local lib_src="$ROOT_DIR/erii-core/build/install/erii-core/lib"
     local lib_dst="$PKG_DIR/erii-core/lib"
@@ -201,13 +201,15 @@ step_plugins() {
     fi
 
     dim "  Building assembleAllPlugins ..."
-    "$GRADLEW" -p erii-plugins assembleAllPlugins >/dev/null 2>&1
+    "$GRADLEW" -p erii-plugins assembleAllPlugins
 
     local plugins_build="$ROOT_DIR/erii-plugins/build/plugins"
     if [ ! -d "$plugins_build" ]; then
         red "  ✗ Build output not found: $plugins_build"
         return 1
     fi
+
+    local postinstall_template="$PKG_DIR/create-erii-plugin/postinstall.template.js"
 
     for plugin_dir in "$plugins_build"/*/; do
         [ -d "$plugin_dir" ] || continue
@@ -216,8 +218,41 @@ step_plugins() {
         local dest="$PKG_DIR/erii-plugins/$plugin_id"
         mkdir -p "$dest"
         rm -f "$dest"/*.zip
+
+        # 复制 zip 和 README
         cp -R "$plugin_dir"* "$dest"/
-        dim "  ${plugin_id} -> erii-plugins/${plugin_id}"
+
+        # 新插件：创建 package.json + 复制 postinstall
+        if [ ! -f "$dest/package.json" ]; then
+            node -e "
+                const fs = require('fs');
+                const pkg = {
+                    name: '@spcookie/erii-plugin-${plugin_id}',
+                    version: '1.0.0',
+                    description: 'Erii ${plugin_id} plugin',
+                    scripts: { postinstall: 'node postinstall.js' },
+                    dependencies: { 'adm-zip': '^0.5.16' },
+                    files: ['*.zip', 'postinstall.js'],
+                    author: 'spcookie',
+                    license: 'MIT',
+                    repository: {
+                        type: 'git',
+                        url: 'git+https://github.com/spcookie/erii.git',
+                        directory: 'erii-distribution/packages/erii-plugins/${plugin_id}'
+                    },
+                    bugs: { url: 'https://github.com/spcookie/erii/issues' },
+                    homepage: 'https://github.com/spcookie/erii#readme',
+                    publishConfig: { access: 'public' },
+                    keywords: ['erii', 'plugin', '${plugin_id}']
+                };
+                fs.writeFileSync('${dest}/package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+            cp "$postinstall_template" "$dest/postinstall.js"
+            git -C "$DIST_DIR" add "packages/erii-plugins/${plugin_id}" >/dev/null 2>&1 || true
+            dim "  ${plugin_id} -> erii-plugins/${plugin_id}  $(green '[new]')"
+        else
+            dim "  ${plugin_id} -> erii-plugins/${plugin_id}"
+        fi
     done
 
     git -C "$DIST_DIR" add packages/erii-plugins >/dev/null 2>&1 || true
