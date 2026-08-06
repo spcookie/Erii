@@ -41,6 +41,23 @@ done
 #  Phase 1: Build & Copy
 # ================================================================
 
+step_shared_deps() {
+    cyan "--- Step 2: publish shared deps to maven local ---"
+
+    if $DRY_RUN; then
+        yellow "  $(dim '(dry-run)')"
+        return 0
+    fi
+
+    dim "  Publishing erii-common, erii-spi..."
+    "$GRADLEW" :erii-common:publishToMavenLocal :erii-spi:erii-spi-core:publishToMavenLocal :erii-spi:erii-spi-annotation:publishToMavenLocal
+
+    dim "  Publishing onebot-core, onebot-lib, onebot-sdk..."
+    (cd "$ROOT_DIR/erii-onebot11" && ./gradlew :onebot-core:publishToMavenLocal :onebot-lib:publishToMavenLocal :onebot-sdk:publishToMavenLocal)
+
+    green "  ✓ shared deps"
+}
+
 step_cli() {
     cyan "--- Step 1: erii-cli ---"
 
@@ -131,7 +148,7 @@ is_core_jar() {
 }
 
 step_core() {
-    cyan "--- Step 2: erii-core ---"
+    cyan "--- Step 3: erii-core ---"
 
     if $DRY_RUN; then
         yellow "  erii-core  $(dim '(dry-run)')"
@@ -193,7 +210,7 @@ step_core() {
 }
 
 step_plugins() {
-    cyan "--- Step 3: erii-plugins ---"
+    cyan "--- Step 4: erii-plugins ---"
 
     if $DRY_RUN; then
         yellow "  erii-plugins  $(dim '(dry-run)')"
@@ -265,7 +282,7 @@ build_phase() {
     bold "$(cyan '--- Build Phase ---')"
 
     if ! $SKIP_CLI;    then step_cli;    else dim "  erii-cli (skipped)"; fi
-    if ! $SKIP_CORE;   then step_core;   else dim "  erii-core (skipped)"; fi
+    if ! $SKIP_CORE;   then step_shared_deps; step_core;   else dim "  erii-core (skipped)"; fi
     if ! $SKIP_PLUGINS; then step_plugins; else dim "  erii-plugins (skipped)"; fi
 
     green "Build complete."
